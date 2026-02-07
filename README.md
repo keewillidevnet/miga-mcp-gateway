@@ -45,14 +45,21 @@ anomaly correlation, and capacity planning that no individual platform can achie
 │   Dynamic routing via AGNTCY Directory + OASF capability lookup │
 │   6 Role Categories: Observability │ Security │ Automation      │
 │                      Configuration │ Compliance │ Identity      │
-└──┬──────┬──────┬──────┬──────┬──────┬───────────┬───────────────┘
-   │      │      │      │      │      │           │
-   ▼      ▼      ▼      ▼      ▼      ▼           ▼
-┌─────┐┌─────┐┌─────┐┌─────┐┌─────┐┌──────┐ ┌─────────┐
-│CatC ││Mera-││Thou-││Webex││ XDR ││SecCld│ │  INFER  │
-│     ││ki   ││sand-││     ││     ││Ctrl  │ │ Fusion  │
-│     ││     ││Eyes ││     ││     ││      │ │ Engine  │
-└─────┘└─────┘└─────┘└─────┘└─────┘└──────┘ └─────────┘
+└──┬──────┬──────┬──────┬──────┬──────┬───────────────────────────┘
+   │      │      │      │      │      │        MCP │
+   ▼      ▼      ▼      ▼      ▼      ▼            ▼
+┌─────┐┌─────┐┌─────┐┌─────┐┌─────┐┌──────┐  ┌──────────────┐
+│CatC ││Mera-││Thou-││Webex││ XDR ││SecCld│  │    INFER     │
+│     ││ki   ││sand-││     ││     ││Ctrl  │  │   Fusion     │
+│     ││     ││Eyes ││     ││     ││      │  │   Engine     │
+└──┬──┘└──┬──┘└──┬──┘└──┬──┘└──┬──┘└──┬───┘  │              │
+   │      │      │      │      │      │      │  Correlation │
+   └──────└──────┴──────┴──────┴──────┘      │  RCA         │
+                       │                     │  Anomaly Det │
+                 Redis pub/sub               │  Prediction  │
+                       │                     │  Risk Score  │
+                       └────────────────────▶│              │
+                                             └──────────────┘
 ┌─────┐┌─────┐┌─────┐┌─────┐┌─────┐┌──────┐
 │AppD ││Nexus││SDWAN││ ISE ││Splnk││Hyper │  ← Stubs
 │(stb)││(stb)││(stb)││(stb)││(stb)││(stb) │
