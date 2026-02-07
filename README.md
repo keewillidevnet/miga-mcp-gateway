@@ -121,6 +121,114 @@ miga/
 | Splunk | 🔲 Stub | Observability, Security |
 | Hypershield | 🔲 Stub | Security |
 
+
+## Use Case Scenarios
+
+### 🚨 NOC / Incident Response
+
+A network engineer gets paged at 2 AM. Instead of logging into four different dashboards, they open WebEx on their phone:
+
+> **Engineer:** `network status`
+
+MIGA fans out across Catalyst Center, Meraki, ThousandEyes, and XDR simultaneously, returning a single health card with scores, top issues, and active threats. ThousandEyes is flagging packet loss on a WAN path.
+
+> **Engineer:** `correlate events last 30 minutes`
+
+INFER finds the ThousandEyes path loss overlaps with a Meraki VPN tunnel flap and a Catalyst Center device error, all affecting the same branch site. It returns a root cause analysis card pointing to a failing upstream switch with recommended actions.
+
+> **Engineer:** `run show interface gi1/0/1 on switch-br-01`
+
+The bot presents an **approval card**. The on-call lead taps ✅ **Approve**. The command executes through Catalyst Center and results render inline. Total time: **3 minutes, never left WebEx.**
+
+---
+
+### 🔒 Security Operations
+
+A SOC analyst opens the Network Security WebEx space:
+
+> **Analyst:** `critical security events`
+
+XDR returns active threat detections, Meraki flags anomalous traffic, and Security Cloud Control shows a policy violation.
+
+> **Analyst:** `risk score`
+
+INFER calculates a composite **78/100** — the top contributor is an unpatched endpoint communicating with a known C2 domain.
+
+> **Analyst:** `quarantine endpoint AA:BB:CC:DD:EE:01`
+
+An approval card fires to the security lead. One tap — ISE isolates the device. The entire **triage-to-containment loop** happened in a WebEx space without touching a single console.
+
+---
+
+### 🔧 Change Management / Maintenance Windows
+
+Before a maintenance window, the change manager checks in:
+
+> **Change Manager:** `predict failures`
+
+INFER analyzes recent telemetry patterns and flags that three switches in Building C have incrementing CRC errors, suggesting a cascading failure risk. The team adjusts the maintenance plan.
+
+> **Change Manager:** `compare network health before and after`
+
+The bot pulls Catalyst Center health scores and ThousandEyes test baselines, showing the change improved path latency by 12ms with no new issues.
+
+---
+
+### 📊 Executive / Management Reporting
+
+A director drops into the NOC WebEx space:
+
+> **Director:** `how's the network?`
+
+They get a clean health card: **94/100**, 3 active issues (all low severity), zero security incidents. No dashboards, no VPN, no credentials. They forward the card to their VP. Done.
+
+---
+
+### ✅ Compliance Auditing
+
+An auditor needs evidence for an upcoming review:
+
+> **Auditor:** `certificate expiry status`
+
+Security Cloud Control returns all certs expiring within 30 days, rendered as a sortable table card.
+
+> **Auditor:** `compliance posture`
+
+ISE returns endpoint posture stats, INFER calculates drift from baseline. The auditor has **exportable evidence** without requesting access to any platform.
+
+---
+
+### 👥 Multi-Team Collaboration in Shared Spaces
+
+The bot lives in a shared "Network Operations" WebEx space. When INFER detects an anomaly, it **proactively posts an alert card**:
+
+> 🔴 **Anomaly detected:** 3x normal auth failure rate from Building D — correlates with ISE RADIUS timeout and Catalyst Center switch CPU spike.
+
+The network team, security team, and identity team all see it simultaneously. Someone taps **Investigate** on the card, and the bot threads the deep-dive results. Cross-functional triage happens in one place instead of three separate channels and a bridge call.
+
+---
+
+### 🎓 Onboarding / Self-Service
+
+A new hire on the network team starts exploring:
+
+> **New Engineer:** `help`
+
+The bot returns an interactive card listing everything it can do across all 6 roles with example commands. No need to learn 6 different platform UIs on day one.
+
+> **New Engineer:** `list devices`
+>
+> **New Engineer:** `meraki wireless health`
+
+Full inventory and real-time AP status, all through natural language. The learning curve for the entire Cisco stack just collapsed to a conversation.
+
+
+
+
+
+
+
+
 ## AGNTCY Integration
 
 MIGA takes full advantage of Cisco's [AGNTCY](https://agntcy.org)
