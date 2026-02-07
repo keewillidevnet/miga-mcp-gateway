@@ -76,7 +76,7 @@ python -m packages.cli.miga_cli status
 ## Project Structure
 
 ```
-miga/
+miga-mcp-gateway/
 ├── miga_shared/             # Shared library (auth, AGNTCY, formatters, models)
 ├── packages/
 │   ├── gateway/             # Gateway MCP Server (role-based routing)
