@@ -1,17 +1,14 @@
-# MIGA — MCP Intelligence Gateway Architecture
+# MIGA - MCP Intelligence Gateway Architecture
 
 > A unified intelligence layer that consolidates AI and ML data from multiple Cisco
 > operational platforms into a single, consistent interface for analysis, automation,
-> and decision support — with conversational WebEx Chat integration.
-
-**Author:** Keenan Williams | Network Engineer II
-**License:** Apache 2.0 | **Cisco Code Exchange Compatible**
+> and decision support with conversational WebEx Chat integration.
 
 ---
 
 ## Overview
 
-Modern enterprise networks run across dozens of Cisco platforms — Catalyst Center,
+Modern enterprise networks run across dozens of Cisco platforms; Catalyst Center,
 Meraki, ThousandEyes, AppDynamics, Webex, XDR, Hypershield, and more. Each platform
 produces isolated telemetry and requires custom integrations. **MIGA solves this** by
 exposing every platform's AI/ML capabilities through a scalable MCP (Model Context
@@ -20,7 +17,7 @@ complete context, consistent data quality, and a governed interaction model.
 
 Users interact with the cluster conversationally through a **WebEx Bot** that embeds
 an MCP Client, converting natural language into structured MCP tool calls via an NLP
-pipeline — with results rendered as rich Adaptive Cards.
+pipeline with results rendered as rich Adaptive Cards.
 
 The **INFER** (Infrastructure Network Fusion Engine for Reasoning) service continuously
 ingests cross-platform telemetry to perform predictive analysis, root cause analysis,
@@ -30,16 +27,16 @@ anomaly correlation, and capacity planning that no individual platform can achie
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│                     WebEx Bot (Python)                           │
+│                     WebEx Bot (Python)                          │
 │        NLP Intent → MCP Client → Adaptive Cards → HITL          │
-│                   [AGNTCY Identity Badge]                        │
+│                   [AGNTCY Identity Badge]                       │
 └──────────────────────────┬──────────────────────────────────────┘
                            │ JSON RPC 2.0
 ┌──────────────────────────▼──────────────────────────────────────┐
-│                   Gateway MCP Server (Python)                    │
-│   Dynamic routing via AGNTCY Directory + OASF capability lookup  │
-│   6 Role Categories: Observability │ Security │ Automation       │
-│                      Configuration │ Compliance │ Identity       │
+│                   Gateway MCP Server (Python)                   │
+│   Dynamic routing via AGNTCY Directory + OASF capability lookup │
+│   6 Role Categories: Observability │ Security │ Automation      │
+│                      Configuration │ Compliance │ Identity      │
 └──┬──────┬──────┬──────┬──────┬──────┬───────────┬───────────────┘
    │      │      │      │      │      │           │
    ▼      ▼      ▼      ▼      ▼      ▼           ▼
@@ -126,12 +123,12 @@ miga/
 
 ## AGNTCY Integration
 
-MIGA is the first project demonstrating Cisco's [AGNTCY](https://agntcy.org)
+MIGA takes full advantage of Cisco's [AGNTCY](https://agntcy.org)
 Internet of Agents framework (Linux Foundation) orchestrating Cisco platform
 AI/ML capabilities:
 
 - **OASF**: Each MCP server publishes a structured capability record
-- **Agent Directory**: Dynamic discovery — deploy a new server and the Gateway finds it
+- **Agent Directory**: Dynamic discovery (deploy a new server and the Gateway finds it)
 - **Identity**: Cryptographically verifiable server identities via Agent Badges
 - **SLIM** (v2): Quantum-safe inter-service messaging
 - **Observability** (v2): OpenTelemetry distributed tracing
