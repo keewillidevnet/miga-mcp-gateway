@@ -56,7 +56,7 @@ anomaly correlation, and capacity planning that no individual platform can achie
 
 ```bash
 # Clone the repository
-git clone https://github.com/your-org/miga-mcp-gateway.git && cd miga
+git clone https://github.com/your-org/miga-mcp-gateway.git && cd miga-mcp-gateway
 
 # Copy environment template and add your API credentials
 cp .env.example .env
