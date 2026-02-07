@@ -1,0 +1,320 @@
+# MIGA — Docker Compose (local development / demo)
+# Usage: docker compose up -d
+# All services start with mock-friendly defaults.
+
+x-server-base: &server-base
+  build:
+    context: .
+    dockerfile: Dockerfile
+    target: server
+  env_file: .env
+  depends_on:
+    redis:
+      condition: service_healthy
+  networks:
+    - miga
+  restart: unless-stopped
+
+services:
+  # ==========================================================================
+  # Infrastructure
+  # ==========================================================================
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    volumes:
+      - redis-data:/data
+    networks:
+      - miga
+
+  agntcy-directory:
+    image: ghcr.io/agntcy/directory:latest
+    ports:
+      - "8500:8500"
+    environment:
+      - LISTEN_ADDR=0.0.0.0:8500
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8500/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+    networks:
+      - miga
+
+  # ==========================================================================
+  # Gateway
+  # ==========================================================================
+
+  gateway:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: gateway
+    env_file: .env
+    environment:
+      - MIGA_GATEWAY_PORT=8000
+      - MIGA_REDIS_URL=redis://redis:6379/0
+      - AGNTCY_DIRECTORY_URL=http://agntcy-directory:8500
+    ports:
+      - "8000:8000"
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks:
+      - miga
+    restart: unless-stopped
+
+  # ==========================================================================
+  # WebEx Bot
+  # ==========================================================================
+
+  webex-bot:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: webex-bot
+    env_file: .env
+    environment:
+      - WEBEX_BOT_PORT=9000
+      - MIGA_GATEWAY_URL=http://gateway:8000
+    ports:
+      - "9000:9000"
+    depends_on:
+      - gateway
+    networks:
+      - miga
+    restart: unless-stopped
+
+  # ==========================================================================
+  # Fully Implemented MCP Servers
+  # ==========================================================================
+
+  catalyst-center-mcp:
+    <<: *server-base
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: server
+      args:
+        SERVER_NAME: catalyst_center_mcp
+    environment:
+      - PORT=8001
+      - MIGA_REDIS_URL=redis://redis:6379/0
+      - AGNTCY_DIRECTORY_URL=http://agntcy-directory:8500
+    ports:
+      - "8001:8001"
+
+  meraki-mcp:
+    <<: *server-base
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: server
+      args:
+        SERVER_NAME: meraki_mcp
+    environment:
+      - PORT=8002
+      - MIGA_REDIS_URL=redis://redis:6379/0
+      - AGNTCY_DIRECTORY_URL=http://agntcy-directory:8500
+    ports:
+      - "8002:8002"
+
+  thousandeyes-mcp:
+    <<: *server-base
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: server
+      args:
+        SERVER_NAME: thousandeyes_mcp
+    environment:
+      - PORT=8003
+      - MIGA_REDIS_URL=redis://redis:6379/0
+      - AGNTCY_DIRECTORY_URL=http://agntcy-directory:8500
+    ports:
+      - "8003:8003"
+
+  webex-mcp:
+    <<: *server-base
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: server
+      args:
+        SERVER_NAME: webex_mcp
+    environment:
+      - PORT=8004
+      - MIGA_REDIS_URL=redis://redis:6379/0
+      - AGNTCY_DIRECTORY_URL=http://agntcy-directory:8500
+    ports:
+      - "8004:8004"
+
+  xdr-mcp:
+    <<: *server-base
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: server
+      args:
+        SERVER_NAME: xdr_mcp
+    environment:
+      - PORT=8005
+      - MIGA_REDIS_URL=redis://redis:6379/0
+      - AGNTCY_DIRECTORY_URL=http://agntcy-directory:8500
+    ports:
+      - "8005:8005"
+
+  security-cloud-control-mcp:
+    <<: *server-base
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: server
+      args:
+        SERVER_NAME: security_cloud_control_mcp
+    environment:
+      - PORT=8006
+      - MIGA_REDIS_URL=redis://redis:6379/0
+      - AGNTCY_DIRECTORY_URL=http://agntcy-directory:8500
+    ports:
+      - "8006:8006"
+
+  infer-mcp:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: infer
+    env_file: .env
+    environment:
+      - INFER_MCP_PORT=8007
+      - MIGA_REDIS_URL=redis://redis:6379/0
+      - AGNTCY_DIRECTORY_URL=http://agntcy-directory:8500
+    ports:
+      - "8007:8007"
+    depends_on:
+      redis:
+        condition: service_healthy
+    volumes:
+      - infer-data:/data/infer
+    networks:
+      - miga
+    restart: unless-stopped
+
+  # ==========================================================================
+  # Stub MCP Servers (Community Implementation Ready)
+  # ==========================================================================
+
+  appdynamics-mcp:
+    <<: *server-base
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: server
+      args:
+        SERVER_NAME: appdynamics_mcp
+    environment:
+      - PORT=8008
+      - MIGA_REDIS_URL=redis://redis:6379/0
+    ports:
+      - "8008:8008"
+    profiles:
+      - stubs
+
+  nexus-dashboard-mcp:
+    <<: *server-base
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: server
+      args:
+        SERVER_NAME: nexus_dashboard_mcp
+    environment:
+      - PORT=8009
+      - MIGA_REDIS_URL=redis://redis:6379/0
+    ports:
+      - "8009:8009"
+    profiles:
+      - stubs
+
+  sdwan-mcp:
+    <<: *server-base
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: server
+      args:
+        SERVER_NAME: sdwan_mcp
+    environment:
+      - PORT=8010
+      - MIGA_REDIS_URL=redis://redis:6379/0
+    ports:
+      - "8010:8010"
+    profiles:
+      - stubs
+
+  ise-mcp:
+    <<: *server-base
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: server
+      args:
+        SERVER_NAME: ise_mcp
+    environment:
+      - PORT=8011
+      - MIGA_REDIS_URL=redis://redis:6379/0
+    ports:
+      - "8011:8011"
+    profiles:
+      - stubs
+
+  splunk-mcp:
+    <<: *server-base
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: server
+      args:
+        SERVER_NAME: splunk_mcp
+    environment:
+      - PORT=8012
+      - MIGA_REDIS_URL=redis://redis:6379/0
+    ports:
+      - "8012:8012"
+    profiles:
+      - stubs
+
+  hypershield-mcp:
+    <<: *server-base
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: server
+      args:
+        SERVER_NAME: hypershield_mcp
+    environment:
+      - PORT=8013
+      - MIGA_REDIS_URL=redis://redis:6379/0
+    ports:
+      - "8013:8013"
+    profiles:
+      - stubs
+
+# ==========================================================================
+# Volumes & Networks
+# ==========================================================================
+
+volumes:
+  redis-data:
+  infer-data:
+
+networks:
+  miga:
+    driver: bridge

@@ -1,0 +1,17 @@
+apiVersion: v2
+name: miga
+description: MIGA — MCP Intelligence Gateway Architecture for Cisco AI/ML Platforms
+version: 1.0.0
+appVersion: "1.0.0"
+type: application
+keywords:
+  - cisco
+  - mcp
+  - ai
+  - ml
+  - network
+  - automation
+  - agntcy
+maintainers:
+  - name: Keenan Williams
+    email: keenan@example.com

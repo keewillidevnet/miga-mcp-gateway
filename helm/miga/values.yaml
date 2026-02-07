@@ -1,0 +1,181 @@
+# MIGA Helm Chart — Default Values
+# Override with: helm install miga ./helm/miga -f my-values.yaml
+
+global:
+  image:
+    registry: ""
+    pullPolicy: IfNotPresent
+    tag: "1.0.0"
+  env: production
+  redis:
+    url: redis://redis:6379/0
+
+# ---------------------------------------------------------------------------
+# Gateway
+# ---------------------------------------------------------------------------
+gateway:
+  enabled: true
+  replicaCount: 2
+  image:
+    repository: miga/gateway
+    tag: ""  # defaults to global.image.tag
+  port: 8000
+  resources:
+    requests:
+      cpu: 250m
+      memory: 256Mi
+    limits:
+      cpu: 1000m
+      memory: 512Mi
+  ingress:
+    enabled: true
+    host: miga.example.com
+    tls: true
+    annotations:
+      kubernetes.io/ingress.class: nginx
+
+# ---------------------------------------------------------------------------
+# WebEx Bot
+# ---------------------------------------------------------------------------
+webexBot:
+  enabled: true
+  replicaCount: 1
+  image:
+    repository: miga/webex-bot
+    tag: ""
+  port: 9000
+  resources:
+    requests:
+      cpu: 250m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+# ---------------------------------------------------------------------------
+# Platform Servers (fully implemented)
+# ---------------------------------------------------------------------------
+servers:
+  catalystCenter:
+    enabled: true
+    replicaCount: 1
+    port: 8001
+    image:
+      repository: miga/catalyst-center-mcp
+  meraki:
+    enabled: true
+    replicaCount: 1
+    port: 8002
+    image:
+      repository: miga/meraki-mcp
+  thousandeyes:
+    enabled: true
+    replicaCount: 1
+    port: 8003
+    image:
+      repository: miga/thousandeyes-mcp
+  webex:
+    enabled: true
+    replicaCount: 1
+    port: 8004
+    image:
+      repository: miga/webex-mcp
+  xdr:
+    enabled: true
+    replicaCount: 1
+    port: 8005
+    image:
+      repository: miga/xdr-mcp
+  securityCloudControl:
+    enabled: true
+    replicaCount: 1
+    port: 8006
+    image:
+      repository: miga/security-cloud-control-mcp
+  infer:
+    enabled: true
+    replicaCount: 1
+    port: 8007
+    image:
+      repository: miga/infer-mcp
+    resources:
+      requests:
+        cpu: 500m
+        memory: 512Mi
+      limits:
+        cpu: 2000m
+        memory: 2Gi
+
+# ---------------------------------------------------------------------------
+# Stub Servers (disabled by default)
+# ---------------------------------------------------------------------------
+stubs:
+  appdynamics:
+    enabled: false
+    port: 8008
+    image:
+      repository: miga/appdynamics-mcp
+  nexusDashboard:
+    enabled: false
+    port: 8009
+    image:
+      repository: miga/nexus-dashboard-mcp
+  sdwan:
+    enabled: false
+    port: 8010
+    image:
+      repository: miga/sdwan-mcp
+  ise:
+    enabled: false
+    port: 8011
+    image:
+      repository: miga/ise-mcp
+  splunk:
+    enabled: false
+    port: 8012
+    image:
+      repository: miga/splunk-mcp
+  hypershield:
+    enabled: false
+    port: 8013
+    image:
+      repository: miga/hypershield-mcp
+
+# ---------------------------------------------------------------------------
+# Infrastructure
+# ---------------------------------------------------------------------------
+redis:
+  enabled: true
+  image:
+    repository: redis
+    tag: "7-alpine"
+  port: 6379
+  persistence:
+    enabled: true
+    size: 1Gi
+
+agntcyDirectory:
+  enabled: true
+  image:
+    repository: ghcr.io/agntcy/directory
+    tag: latest
+  port: 8500
+
+# ---------------------------------------------------------------------------
+# Secrets (reference to K8s Secret)
+# ---------------------------------------------------------------------------
+secrets:
+  name: miga-secrets
+  # Create with:
+  # kubectl create secret generic miga-secrets --from-env-file=.env -n miga
+
+# ---------------------------------------------------------------------------
+# Default server resources
+# ---------------------------------------------------------------------------
+defaultResources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    cpu: 500m
+    memory: 256Mi
