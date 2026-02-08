@@ -2,7 +2,7 @@
 [![Python](https://img.shields.io/badge/python-3.11+-green.svg)](https://python.org)
 [![MCP](https://img.shields.io/badge/MCP-Streamable%20HTTP-purple.svg)](https://modelcontextprotocol.io)
 [![AGNTCY](https://img.shields.io/badge/AGNTCY-Native-orange.svg)](https://agntcy.org)
-[![Platforms](https://img.shields.io/badge/Cisco%20Platforms-13-red.svg)](#platform-coverage)
+[![Platforms](https://img.shields.io/badge/Platforms-15-red.svg)](#platform-coverage)
 [![Code Style](https://img.shields.io/badge/code%20style-ruff-000000.svg)](https://github.com/astral-sh/ruff)
 [![Cisco Code Exchange](https://img.shields.io/badge/Cisco-Code%20Exchange-00bceb.svg)](https://developer.cisco.com/codeexchange/)
 
@@ -60,10 +60,10 @@ anomaly correlation, and capacity planning that no individual platform can achie
                        │                     │  Risk Score  │
                        └────────────────────▶│              │
                                              └──────────────┘
-┌─────┐┌─────┐┌─────┐┌─────┐┌─────┐┌──────┐
-│AppD ││Nexus││SDWAN││ ISE ││Splnk││Hyper │  ← Stubs
-│(stb)││(stb)││(stb)││(stb)││(stb)││(stb) │
-└─────┘└─────┘└─────┘└─────┘└─────┘└──────┘
+┌─────┐┌─────┐┌─────┐┌─────┐┌─────┐┌──────┐┌──────┐┌──────┐
+│AppD ││Nexus││SDWAN││ ISE ││Splnk││Hyper ││ Snow ││NetBx │  ← Stubs
+│(stb)││(stb)││(stb)││(stb)││(stb)││(stb) ││(stb) ││(stb) │
+└─────┘└─────┘└─────┘└─────┘└─────┘└──────┘└──────┘└──────┘
    All registered in ──► AGNTCY Directory (ADS)
 ```
 
@@ -71,7 +71,7 @@ anomaly correlation, and capacity planning that no individual platform can achie
 
 ```bash
 # Clone the repository
-git clone https://github.com/your-org/miga-mcp-gateway.git && cd miga-mcp-gateway
+git clone https://github.com/keewillidevnet/miga-mcp-gateway.git && cd miga-mcp-gateway
 
 # Copy environment template and add your API credentials
 cp .env.example .env
@@ -110,7 +110,9 @@ miga-mcp-gateway/
 │   ├── sdwan_mcp/           # SD-WAN                        [Stub]
 │   ├── ise_mcp/             # ISE                           [Stub]
 │   ├── splunk_mcp/          # Splunk                        [Stub]
-│   └── hypershield_mcp/     # Hypershield                   [Stub]
+│   ├── hypershield_mcp/     # Hypershield                   [Stub]
+│   ├── servicenow_mcp/      # ServiceNow ITSM & AIOps      [Stub]
+│   └── netbox_mcp/          # NetBox DCIM & IPAM            [Stub]
 ├── helm/miga/               # Helm charts for K8s deployment
 ├── k8s/                     # Raw K8s manifests
 ├── docs/                    # Documentation
@@ -135,6 +137,8 @@ miga-mcp-gateway/
 | ISE | 🔲 Stub | Identity, Compliance |
 | Splunk | 🔲 Stub | Observability, Security |
 | Hypershield | 🔲 Stub | Security |
+| ServiceNow | 🔲 Stub | Automation, Observability |
+| NetBox | 🔲 Stub | Configuration, Compliance |
 
 
 ## Use Case Scenarios
