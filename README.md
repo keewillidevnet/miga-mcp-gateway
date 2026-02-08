@@ -237,7 +237,53 @@ The bot returns an interactive card listing everything it can do across all 6 ro
 
 Full inventory and real-time AP status, all through natural language. The learning curve for the entire Cisco stack just collapsed to a conversation.
 
+---
 
+### 🎫 Closed-Loop Incident Management (ServiceNow)
+
+INFER detects a correlated branch outage across ThousandEyes, Meraki, and Catalyst Center:
+
+> **MIGA Bot:** 🔴 **Correlated incident detected:** WAN degradation at Site-A — 3 platforms affected, root cause: upstream circuit CKT-00412 packet loss.
+
+The bot auto-creates a ServiceNow P1 incident with the full RCA attached. ServiceNow's Predictive Intelligence assigns it to Network Operations with 91% confidence.
+
+> **Engineer:** `status INC0078432`
+
+The bot pulls the live ticket: assigned to Jane Smith, Lumen NOC contacted, provider ticket LMN-98765 open.
+
+> **Engineer:** `any changes scheduled for core-switch-03?`
+
+ServiceNow returns two upcoming changes — an IOS-XE upgrade Saturday night and a Lumen bandwidth upgrade next week. The engineer confirms the outage isn't change-related.
+
+After remediation, the engineer types:
+
+> **Engineer:** `resolve INC0078432 — Lumen fiber repair completed, circuit stable`
+
+MIGA updates the ServiceNow ticket with resolution notes, INFER confirms health scores recovered, and the incident closes. **Full lifecycle — detection to resolution — in one WebEx thread.**
+
+---
+
+### 🗺️ Infrastructure Context & Impact Analysis (NetBox)
+
+INFER flags an anomaly on `10.1.50.1`. Without NetBox, that's just an IP address. With NetBox:
+
+> **Engineer:** `what is 10.1.50.1?`
+
+NetBox resolves it: **Core Switch 3** — Catalyst 9300-48P, Rack 14, Building C, serial FCW2345L0AB, running IOS-XE 17.09.04a.
+
+> **Engineer:** `what's the blast radius?`
+
+NetBox maps the relationships: 3 downstream access switches serving **240 users**, upstream WAN edge on Lumen circuit CKT-00412, supporting Branch Office VPN and VoIP services. The engineer now knows this is a high-impact event before a single user calls the help desk.
+
+> **Engineer:** `trace the path from core-switch-03 to the WAN edge`
+
+NetBox returns the physical cable path and circuit information. The engineer sees the handoff interface and can pinpoint exactly where to look.
+
+During change planning, the team asks:
+
+> **Change Manager:** `what devices are in Rack 14?`
+
+NetBox returns the full rack elevation — power budget, available U-space, and every device with its role. The maintenance window plan now accounts for every dependency, not just the device being touched.
 
 
 
