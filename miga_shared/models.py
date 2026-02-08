@@ -37,6 +37,8 @@ class PlatformType(str, Enum):
     ISE = "ise"
     SPLUNK = "splunk"
     HYPERSHIELD = "hypershield"
+    SERVICENOW = "servicenow"
+    NETBOX = "netbox"
     INFER = "infer"
 
 

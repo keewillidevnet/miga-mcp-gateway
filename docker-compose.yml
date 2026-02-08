@@ -307,6 +307,38 @@ services:
     profiles:
       - stubs
 
+  servicenow-mcp:
+    <<: *server-base
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: server
+      args:
+        SERVER_NAME: servicenow_mcp
+    environment:
+      - PORT=8014
+      - MIGA_REDIS_URL=redis://redis:6379/0
+    ports:
+      - "8014:8014"
+    profiles:
+      - stubs
+
+  netbox-mcp:
+    <<: *server-base
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: server
+      args:
+        SERVER_NAME: netbox_mcp
+    environment:
+      - PORT=8015
+      - MIGA_REDIS_URL=redis://redis:6379/0
+    ports:
+      - "8015:8015"
+    profiles:
+      - stubs
+
 # ==========================================================================
 # Volumes & Networks
 # ==========================================================================

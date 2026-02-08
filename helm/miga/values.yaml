@@ -141,6 +141,18 @@ stubs:
     image:
       repository: miga/hypershield-mcp
 
+  servicenow:
+    enabled: false
+    port: 8014
+    image:
+      repository: miga/servicenow-mcp
+
+  netbox:
+    enabled: false
+    port: 8015
+    image:
+      repository: miga/netbox-mcp
+
 # ---------------------------------------------------------------------------
 # Infrastructure
 # ---------------------------------------------------------------------------
