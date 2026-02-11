@@ -1,3 +1,4 @@
+# MIGA - MCP Intelligence Gateway Architecture
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/python-3.11+-green.svg)](https://python.org)
 [![MCP](https://img.shields.io/badge/MCP-Streamable%20HTTP-purple.svg)](https://modelcontextprotocol.io)
@@ -6,7 +7,7 @@
 [![Code Style](https://img.shields.io/badge/code%20style-ruff-000000.svg)](https://github.com/astral-sh/ruff)
 [![Cisco Code Exchange](https://img.shields.io/badge/Cisco-Code%20Exchange-00bceb.svg)](https://developer.cisco.com/codeexchange/)
 
-# MIGA - MCP Intelligence Gateway Architecture
+
 
 > A unified intelligence layer that consolidates AI and ML data from multiple Cisco
 > operational platforms into a single, consistent interface for analysis, automation,
