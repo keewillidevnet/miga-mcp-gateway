@@ -31,6 +31,7 @@ from typing import Any
 
 from mcp.server.fastmcp import FastMCP
 from pydantic import BaseModel, ConfigDict, Field
+from starlette.responses import JSONResponse
 
 from miga_shared.agntcy import DirectoryClient, IdentityBadge
 from miga_shared.models import MIGARole
@@ -38,6 +39,23 @@ from miga_shared.registry import ServerSpec, load_registry
 from miga_shared.transport import MCPClientPool, MCPTransportError
 from miga_shared.utils.redis_bus import RedisPubSub
 
+
+def _configure_logging() -> None:
+    """Make the ``miga.*`` loggers' INFO output (e.g. the OASF publish count) survive
+    uvicorn's logging reconfiguration when FastMCP runs over streamable-http. Called at
+    import AND again at lifespan start (which runs after uvicorn has reconfigured).
+    NOTE (cosmetic, not live-verified): pending operator re-run on a networked host."""
+    lg = logging.getLogger("miga")
+    lg.setLevel(logging.INFO)
+    lg.disabled = False
+    if not any(getattr(h, "_miga", False) for h in lg.handlers):
+        handler = logging.StreamHandler()
+        handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(name)s: %(message)s"))
+        handler._miga = True  # type: ignore[attr-defined]
+        lg.addHandler(handler)
+
+
+_configure_logging()
 logger = logging.getLogger("miga.gateway")
 
 _REPO_ROOT = Path(__file__).resolve().parent.parent.parent
@@ -119,10 +137,6 @@ async def _publish_oasf_records(directory: DirectoryClient, specs: list[ServerSp
             record = json.loads(record_path.read_text(encoding="utf-8"))
             await directory.register_record(record)
             published += 1
-        except AttributeError:
-            # DirectoryClient without register_record: skip gracefully.
-            logger.debug("DirectoryClient has no register_record; skipping publish")
-            break
         except Exception as exc:  # pragma: no cover - network failure path
             logger.warning("Failed to publish OASF record for %s: %s", spec.name, exc)
     return published
@@ -138,6 +152,7 @@ pool = MCPClientPool()
 
 @asynccontextmanager
 async def app_lifespan():
+    _configure_logging()  # re-assert after uvicorn's logging reconfiguration
     directory = DirectoryClient()
     bus = RedisPubSub()
     badge = IdentityBadge(subject="miga/gateway")
@@ -147,7 +162,8 @@ async def app_lifespan():
 
     specs = load_registry()
     routing.load_from_registry(specs)
-    await _publish_oasf_records(directory, specs)
+    _published = await _publish_oasf_records(directory, specs)
+    logger.info("Published %d/%d OASF records to AGNTCY Directory", _published, len(specs))
 
     async def _refresh_loop():
         while True:
@@ -174,7 +190,20 @@ async def app_lifespan():
         await directory.close()
 
 
-mcp = FastMCP("miga_gateway", lifespan=app_lifespan)
+mcp = FastMCP(
+    "miga_gateway",
+    lifespan=app_lifespan,
+    host="0.0.0.0",
+    port=int(os.getenv("MIGA_GATEWAY_PORT", "8000")),
+)
+
+
+@mcp.custom_route("/health", methods=["GET"])
+async def _http_health(_request) -> JSONResponse:
+    """Plain-HTTP health endpoint for the container HEALTHCHECK. FastMCP serves the MCP
+    protocol at /mcp, so a `curl /health` probe 404s without this lightweight route —
+    lower-risk than probing the MCP path. NOTE (cosmetic, not live-verified)."""
+    return JSONResponse({"status": "ok", "service": "miga_gateway"})
 
 
 # ---------------------------------------------------------------------------
@@ -373,5 +402,4 @@ async def gateway_health(ctx=None) -> str:
 
 
 if __name__ == "__main__":
-    port = int(os.getenv("MIGA_GATEWAY_PORT", "8000"))
-    mcp.run(transport="streamable_http", port=port)
+    mcp.run(transport="streamable-http")

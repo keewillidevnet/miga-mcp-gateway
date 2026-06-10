@@ -17,6 +17,9 @@ dependencies = [
     "cryptography>=41.0.0",
     "click>=8.1.0",
     "aiohttp>=3.9.0",
+    # AGNTCY Directory SDK — buf.build index (not PyPI), version 1.3.0 confirmed.
+    # uv add agntcy-dir --index https://buf.build/gen/python . See VERIFY_DIRECTORY.md.
+    "agntcy-dir==1.3.0",
 ]
 
 [project.optional-dependencies]

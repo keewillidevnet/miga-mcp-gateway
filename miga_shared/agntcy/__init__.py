@@ -2,16 +2,32 @@
 
 from __future__ import annotations
 
+import asyncio
+import contextlib
 import logging
 import os
 from dataclasses import dataclass, field
 from typing import Any
 
-import httpx
-
 from miga_shared.models import MIGARole, PlatformCapability, PlatformType
 
 logger = logging.getLogger("miga.agntcy")
+
+# ---------------------------------------------------------------------------
+# Optional agntcy-dir SDK (real surface confirmed via live introspection on
+# agntcy-dir==1.3.0). The import is guarded so MIGA still runs when the SDK is
+# absent — that absence IS the standalone path (and how CI / the build sandbox run).
+# ---------------------------------------------------------------------------
+try:
+    from agntcy.dir_sdk.client import Client, Config
+    from agntcy.dir_sdk.models import core_v1
+    from google.protobuf.json_format import MessageToDict, ParseDict
+    from google.protobuf.struct_pb2 import Struct
+
+    _SDK_AVAILABLE = True
+except ImportError:
+    Client = Config = core_v1 = Struct = ParseDict = MessageToDict = None  # type: ignore[assignment]
+    _SDK_AVAILABLE = False
 
 
 # ---------------------------------------------------------------------------
@@ -103,46 +119,151 @@ class OASFRecord:
 
 
 class DirectoryClient:
-    """Client for the AGNTCY Agent Directory Service (ADS)."""
+    """Client for the real AGNTCY Directory (``dir-apiserver``) via the official
+    **agntcy-dir Python SDK** (``agntcy.dir_sdk``), reconciled to the **1.3.0** surface
+    confirmed by live introspection.
 
-    def __init__(self, url: str | None = None):
-        self.url = (
-            url or os.getenv("AGNTCY_DIRECTORY_URL", "http://agntcy-directory:8500")
-        ).rstrip("/")
-        self._http = httpx.AsyncClient(timeout=15.0)
+    Confirmed SDK surface (1.3.0):
+      * ``Client(Config(server_address=addr))``
+      * ``push(records: list[Record], metadata=None) -> list[RecordRef]`` (LIST in/out)
+      * ``pull(refs: list[RecordRef], metadata=None) -> list[Record]``
+      * ``delete(refs: list[RecordRef], metadata=None) -> None``
+      * ``search_records(req: SearchRecordsRequest, ...) -> list[...]`` (takes a request proto)
+      * ``RecordRef`` has one field ``.cid``; ``Record`` has one field ``.data``
+        (a ``google.protobuf.Struct``) — build via ``core_v1.Record(data=Struct(...))``.
+
+    The SDK runs natively in the gateway; ``dirctl`` is NOT required at runtime (the SDK
+    needs it only for signing, which MIGA does not use).
+
+    **Best-effort by design.** If the SDK is absent or the directory is unreachable,
+    every op logs and returns ``"standalone"``/``"error"`` (or ``None``/``False``/``[]``)
+    and the gateway keeps routing from ``config/server-registry.yaml``. Routing never
+    depends on the directory. The 1.3.0 surface is confirmed by introspection but the
+    live roundtrip is still pending (see VERIFY_DIRECTORY.md).
+    """
+
+    def __init__(self, addr: str | None = None, *, timeout: float = 30.0):
+        # gRPC host:port of dir-apiserver (NOT an http URL).
+        self.addr = addr or os.getenv("AGNTCY_DIRECTORY_ADDR", "agntcy-directory:8888")
+        self.timeout = timeout
+        self._client: Any = None
+
+    # -- SDK plumbing ---------------------------------------------------------
+
+    def _sdk(self) -> Any:
+        """Construct the SDK ``Client`` once from MIGA's ``AGNTCY_DIRECTORY_ADDR``
+        (passed explicitly to ``Config``). Returns None (best-effort) if the SDK is
+        absent or the client can't be built."""
+        if self._client is not None:
+            return self._client
+        if not _SDK_AVAILABLE:
+            return None
+        try:
+            self._client = Client(Config(server_address=self.addr))
+        except Exception as exc:  # noqa: BLE001 - best-effort init
+            logger.warning("AGNTCY Directory client init failed (%s) — standalone", exc)
+            return None
+        return self._client
+
+    @staticmethod
+    def _to_record(oasf_dict: dict[str, Any]) -> Any:
+        """Build a ``core_v1.Record`` from an OASF JSON dict. The OASF document goes in
+        ``Record.data`` (a protobuf ``Struct``) — Record has no other fields."""
+        s = Struct()
+        ParseDict(oasf_dict, s)
+        return core_v1.Record(data=s)
+
+    @staticmethod
+    def _grpc_code(exc: Exception) -> str | None:
+        """Best-effort gRPC status-code name (e.g. UNAVAILABLE, INVALID_ARGUMENT) from a
+        grpc.RpcError, without importing grpc."""
+        code = getattr(exc, "code", None)
+        if callable(code):
+            with contextlib.suppress(Exception):
+                c = code()
+                return getattr(c, "name", str(c))
+        return None
+
+    @classmethod
+    def _classify(cls, exc: Exception) -> str:
+        """Classify a directory error so the operator can tell *unreachable* (directory
+        down) from *rejected* (record refused by the apiserver, e.g. schema mismatch)
+        from a generic error. Returns 'unreachable' | 'rejected' | 'error'."""
+        code = cls._grpc_code(exc)
+        hay = (str(exc) + " " + (code or "")).lower()
+        if code == "UNAVAILABLE" or any(
+            k in hay
+            for k in ("unavailable", "connection", "refused", "deadline", "dial", "no such host")
+        ):
+            return "unreachable"
+        if code in ("INVALID_ARGUMENT", "FAILED_PRECONDITION", "OUT_OF_RANGE") or any(
+            k in hay for k in ("invalid", "valid", "reject", "schema")
+        ):
+            return "rejected"
+        return "error"
+
+    def _push_sync(self, client: Any, record_dict: dict[str, Any]) -> list[Any]:
+        return client.push([self._to_record(record_dict)])
+
+    # -- public API (signatures preserved for server_base / gateway) ----------
 
     async def register(self, record: OASFRecord) -> str:
-        """Register MCP server. Returns CID or 'standalone' if Directory unavailable."""
-        try:
-            resp = await self._http.post(f"{self.url}/v1/records", json=record.to_dict())
-            resp.raise_for_status()
-            cid = resp.json().get("cid", resp.json().get("id", "unknown"))
-            logger.info("Registered %s (CID: %s)", record.name, cid)
-            return cid
-        except httpx.ConnectError:
-            logger.warning("AGNTCY Directory unavailable — standalone mode")
-            return "standalone"
-        except Exception as e:
-            logger.error("Registration failed: %s", e)
-            return "error"
+        """Best-effort publish of a MIGA ``OASFRecord`` (compat for server_base)."""
+        return await self.register_record(record.to_dict())
 
     async def register_record(self, record: dict[str, Any]) -> str:
-        """Publish a raw OASF capability record (the JSON document from
-        ``oasf/records/*.record.json``) into the directory. Used by the gateway to
-        keep dynamic discovery working for the external servers it routes to.
-        Returns the assigned CID, or 'standalone'/'error' if the directory is
-        unavailable. Secrets/connection details are NOT part of the record."""
-        try:
-            resp = await self._http.post(f"{self.url}/v1/records", json=record)
-            resp.raise_for_status()
-            body = resp.json()
-            return body.get("cid", body.get("id", "unknown"))
-        except httpx.ConnectError:
-            logger.warning("AGNTCY Directory unavailable — OASF record not published")
+        """Publish a full OASF capability record via the SDK ``push`` (list-in/list-out)
+        and return the structured ``RecordRef.cid``. Returns ``"standalone"``/``"error"``
+        if the SDK/directory is unavailable (non-fatal — routing continues)."""
+        if not _SDK_AVAILABLE:
+            logger.warning("agntcy-dir SDK not installed — AGNTCY Directory disabled (standalone)")
             return "standalone"
-        except Exception as e:
-            logger.error("OASF record publish failed: %s", e)
+        client = self._sdk()
+        if client is None:
+            return "standalone"
+        name = record.get("name", "record")
+        try:
+            refs = await asyncio.wait_for(
+                asyncio.to_thread(self._push_sync, client, record), timeout=self.timeout
+            )
+        except TimeoutError as exc:
+            logger.warning("directory push failed for %s: %r (timeout/unreachable)", name, exc)
+            return "standalone"
+        except Exception as exc:  # noqa: BLE001 - best-effort
+            kind = self._classify(exc)
+            logger.warning("directory push failed for %s: %r (%s)", name, exc, kind)
+            # unreachable -> standalone (directory treated as down); rejected/error ->
+            # "error" so a refused record is NOT masked as a missing directory.
+            return "standalone" if kind == "unreachable" else "error"
+        if not refs:
+            logger.warning("directory push for %s returned no RecordRef (rejected?)", name)
             return "error"
+        cid = refs[0].cid
+        logger.info("Published %s to AGNTCY Directory (CID: %s)", name, cid)
+        return cid
+
+    async def pull(self, cid: str) -> dict[str, Any] | None:
+        """Pull a record by CID (list-in/list-out). Returns the OASF JSON dict (from
+        ``Record.data``), or None on any failure."""
+        if not _SDK_AVAILABLE:
+            return None
+        client = self._sdk()
+        if client is None:
+            return None
+
+        def _pull_sync() -> dict[str, Any] | None:
+            recs = client.pull([core_v1.RecordRef(cid=cid)])
+            if not recs:
+                return None
+            return MessageToDict(recs[0].data)
+
+        try:
+            return await asyncio.wait_for(asyncio.to_thread(_pull_sync), timeout=self.timeout)
+        except Exception as exc:  # noqa: BLE001 - best-effort
+            logger.warning(
+                "directory pull failed for cid %s: %r (%s)", cid, exc, self._classify(exc)
+            )
+            return None
 
     async def discover(
         self,
@@ -150,38 +271,50 @@ class DirectoryClient:
         roles: list[MIGARole] | None = None,
         platform: PlatformType | None = None,
     ) -> list[OASFRecord]:
-        params: dict[str, str] = {}
-        if skills:
-            params["skills"] = ",".join(skills)
-        if roles:
-            params["roles"] = ",".join(r.value for r in roles)
-        if platform:
-            params["platform"] = platform.value
-        try:
-            resp = await self._http.get(f"{self.url}/v1/records", params=params)
-            resp.raise_for_status()
-            data = resp.json()
-            records = data.get("records", data) if isinstance(data, dict) else data
-            return [OASFRecord.from_dict(r) for r in records]
-        except Exception as e:
-            logger.error("Discovery failed: %s", e)
-            return []
+        """Best-effort discovery. The real method is
+        ``search_records(SearchRecordsRequest)``, but discovery is **not** on the
+        routing path (the gateway routes from ``config/server-registry.yaml``), so the
+        request-proto builder is **intentionally not implemented** here. Returns ``[]``
+        — not faked. Wiring search into routing is a deliberate future step."""
+        return []
 
     async def deregister(self, cid: str) -> bool:
+        if not _SDK_AVAILABLE:
+            return False
+        client = self._sdk()
+        if client is None:
+            return False
+
+        def _delete_sync() -> bool:
+            client.delete([core_v1.RecordRef(cid=cid)])
+            return True
+
         try:
-            resp = await self._http.delete(f"{self.url}/v1/records/{cid}")
-            return resp.status_code < 400
-        except Exception:
+            return await asyncio.wait_for(asyncio.to_thread(_delete_sync), timeout=self.timeout)
+        except Exception as exc:  # noqa: BLE001 - best-effort
+            logger.warning(
+                "directory delete failed for cid %s: %r (%s)", cid, exc, self._classify(exc)
+            )
             return False
 
     async def health(self) -> bool:
-        try:
-            return (await self._http.get(f"{self.url}/health")).status_code == 200
-        except Exception:
+        """Readiness check from real state only: True only if the SDK is available AND a
+        ``Client`` constructs successfully. There is no health RPC; this is readiness,
+        not server liveness (confirmed by the VERIFY_DIRECTORY.md roundtrip). Never
+        returns True if construction raised."""
+        if not _SDK_AVAILABLE:
             return False
+        return self._sdk() is not None
 
     async def close(self):
-        await self._http.aclose()
+        """Close the SDK client if it exposes a close()/Close()."""
+        if self._client is None:
+            return
+        closer = getattr(self._client, "close", None) or getattr(self._client, "Close", None)
+        if callable(closer):
+            with contextlib.suppress(Exception):
+                await asyncio.to_thread(closer)
+        self._client = None
 
 
 # ---------------------------------------------------------------------------

@@ -47,7 +47,12 @@ CMD ["sh", "-c", "python -m servers.${SERVER_NAME}.server"]
 # ---------------------------------------------------------------------------
 FROM base AS gateway
 
+# AGNTCY Directory SDK (not on PyPI; published on the buf.build index)
+RUN pip install --no-cache-dir agntcy-dir==1.3.0 --extra-index-url https://buf.build/gen/python
+
 COPY packages/gateway/ /app/packages/gateway/
+COPY config/ /app/config/
+COPY oasf/ /app/oasf/
 
 ENV MIGA_GATEWAY_PORT=8000
 EXPOSE 8000
