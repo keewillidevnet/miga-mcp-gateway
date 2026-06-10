@@ -33,19 +33,104 @@ services:
     networks:
       - miga
 
-  agntcy-directory:
-    image: ghcr.io/agntcy/directory:latest
-    ports:
-      - "8500:8500"
-    environment:
-      - LISTEN_ADDR=0.0.0.0:8500
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8500/health"]
-      interval: 15s
-      timeout: 5s
-      retries: 3
+  # ==========================================================================
+  # AGNTCY Directory (REAL multi-service stack — replaces the former REST mock)
+  # ==========================================================================
+  # NOTE (not verified in CI / dev sandbox — no container-registry egress here):
+  # image TAGS below are pinned to the dir chart appVersion (1.16.0) and zot
+  # v2.1.16, but the exact published tags MUST be confirmed against ghcr.io on a
+  # networked host (see VERIFY_DIRECTORY.md). Modeled on agntcy/dir
+  # install/docker/docker-compose.yml + apiserver.env.
+  #
+  # `agntcy-directory` is the gRPC dir-apiserver on :8888 (the gateway connects
+  # via AGNTCY_DIRECTORY_ADDR + dirctl). It stores OASF records as OCI artifacts
+  # in zot and indexes them in postgres; the reconciler runs background sync.
+  zot:
+    image: ghcr.io/project-zot/zot:v2.1.16
     networks:
       - miga
+    volumes:
+      - zot-data:/var/lib/registry
+    restart: unless-stopped
+
+  dir-postgres:
+    image: docker.io/bitnami/postgresql:16
+    environment:
+      - POSTGRESQL_USERNAME=postgres
+      - POSTGRESQL_PASSWORD=postgres
+      - POSTGRESQL_DATABASE=directory
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "postgres", "-d", "directory"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+    networks:
+      - miga
+    volumes:
+      - dir-pg-data:/bitnami/postgresql
+    restart: unless-stopped
+
+  agntcy-directory:                      # gRPC dir-apiserver (host kept as agntcy-directory)
+    image: ghcr.io/agntcy/dir-apiserver:1.16.0
+    depends_on:
+      dir-postgres:
+        condition: service_healthy
+      zot:
+        condition: service_started
+    environment:
+      - DIRECTORY_SERVER_LISTEN_ADDRESS=0.0.0.0:8888
+      # Validate records against the OASF schema server. Records are pinned to
+      # OASF 1.0.0; the schema server serves that version.
+      - DIRECTORY_SERVER_OASF_API_VALIDATION_SCHEMA_URL=https://schema.oasf.outshift.com
+      - DIRECTORY_SERVER_STORE_PROVIDER=oci
+      - DIRECTORY_SERVER_STORE_OCI_REGISTRY_ADDRESS=zot:5000
+      - DIRECTORY_SERVER_STORE_OCI_REPOSITORY_NAME=dir
+      - DIRECTORY_SERVER_STORE_OCI_AUTH_CONFIG_INSECURE=true
+      - DIRECTORY_SERVER_DATABASE_TYPE=postgres
+      - DIRECTORY_SERVER_DATABASE_POSTGRES_HOST=dir-postgres
+      - DIRECTORY_SERVER_DATABASE_POSTGRES_PORT=5432
+      - DIRECTORY_SERVER_DATABASE_POSTGRES_DATABASE=directory
+      - DIRECTORY_SERVER_DATABASE_POSTGRES_USERNAME=postgres
+      - DIRECTORY_SERVER_DATABASE_POSTGRES_PASSWORD=postgres
+      - DIRECTORY_SERVER_DATABASE_POSTGRES_SSL_MODE=disable
+      - DIRECTORY_SERVER_ROUTING_LISTEN_ADDRESS=/ip4/0.0.0.0/tcp/8999
+    ports:
+      - "8888:8888"
+    healthcheck:
+      # dir-apiserver ships grpc-health-probe (NOT an HTTP /health endpoint).
+      test: ["CMD", "grpc-health-probe", "-addr=127.0.0.1:8888"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    networks:
+      - miga
+    restart: unless-stopped
+
+  dir-reconciler:
+    image: ghcr.io/agntcy/dir-reconciler:1.16.0
+    depends_on:
+      agntcy-directory:
+        condition: service_started
+      dir-postgres:
+        condition: service_healthy
+    environment:
+      # Reconciler shares the store/database with the apiserver. Confirm the
+      # reconciler.env keys from the dir quickstart on a live run.
+      - DIRECTORY_SERVER_STORE_PROVIDER=oci
+      - DIRECTORY_SERVER_STORE_OCI_REGISTRY_ADDRESS=zot:5000
+      - DIRECTORY_SERVER_STORE_OCI_REPOSITORY_NAME=dir
+      - DIRECTORY_SERVER_STORE_OCI_AUTH_CONFIG_INSECURE=true
+      - DIRECTORY_SERVER_DATABASE_TYPE=postgres
+      - DIRECTORY_SERVER_DATABASE_POSTGRES_HOST=dir-postgres
+      - DIRECTORY_SERVER_DATABASE_POSTGRES_PORT=5432
+      - DIRECTORY_SERVER_DATABASE_POSTGRES_DATABASE=directory
+      - DIRECTORY_SERVER_DATABASE_POSTGRES_USERNAME=postgres
+      - DIRECTORY_SERVER_DATABASE_POSTGRES_PASSWORD=postgres
+      - DIRECTORY_SERVER_DATABASE_POSTGRES_SSL_MODE=disable
+    networks:
+      - miga
+    restart: unless-stopped
 
   # ==========================================================================
   # Gateway (MCP client to all downstream servers)
@@ -63,7 +148,7 @@ services:
     environment:
       - MIGA_GATEWAY_PORT=8000
       - MIGA_REDIS_URL=redis://redis:6379/0
-      - AGNTCY_DIRECTORY_URL=http://agntcy-directory:8500
+      - AGNTCY_DIRECTORY_ADDR=agntcy-directory:8888  # gRPC dir-apiserver (dirctl-based client)
     ports:
       - "8000:8000"
     depends_on:
@@ -172,7 +257,7 @@ services:
     environment:
       - INFER_MCP_PORT=8007
       - MIGA_REDIS_URL=redis://redis:6379/0
-      - AGNTCY_DIRECTORY_URL=http://agntcy-directory:8500
+      - AGNTCY_DIRECTORY_ADDR=agntcy-directory:8888  # gRPC dir-apiserver (dirctl-based client)
     ports:
       - "8007:8007"
     depends_on:
@@ -190,6 +275,8 @@ services:
 volumes:
   redis-data:
   infer-data:
+  zot-data:
+  dir-pg-data:
 
 networks:
   miga:

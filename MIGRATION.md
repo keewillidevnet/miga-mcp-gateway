@@ -284,6 +284,30 @@ main item to address before any AGNTCY-Directory-dependent claim is load-bearing
   OASF validate endpoint MIGA already talks to is needed, run
   `ghcr.io/agntcy/oasf-server` instead.
 
+**Status update (branch `feat/agntcy-directory-real`):** the real wiring is now
+**drafted** and pending operator verification (it could **not** be verified in the
+build sandbox — no container-registry egress, so the images can't be pulled and the
+directory can't be brought up):
+- `docker-compose.yml` now defines the real stack — `agntcy-directory`
+  (`ghcr.io/agntcy/dir-apiserver`, gRPC `:8888`, `grpc-health-probe`), `zot`
+  (`ghcr.io/project-zot/zot:v2.1.16`), `dir-postgres` (`bitnami/postgresql:16`), and
+  `dir-reconciler` — with **pinned tags** (apiserver/reconciler at the chart
+  appVersion `1.16.0`; tags to be confirmed against ghcr.io) and OASF validation
+  pointed at `https://schema.oasf.outshift.com`.
+- `miga_shared/agntcy/DirectoryClient` was rewritten from the REST `/v1/records`
+  mock to the **official `dirctl` CLI** (argv subprocess, `shell=False`): `push`
+  (publish → CID), `pull`, `search`, `delete`. Best-effort semantics preserved — if
+  `dirctl` is absent or the directory is unreachable, it returns `standalone`/`error`
+  and the gateway keeps routing from `config/server-registry.yaml`.
+- Rationale for `dirctl` over hand-rolled gRPC stubs: `dir` is Go-only (no Python
+  SDK); the store path is OCI-artifact + content-addressed (CID) and `dirctl`
+  encapsulates that packaging — raw stubs would mean re-vendoring upstream logic.
+- **Not done / pending live verification:** confirm exact ghcr image tags; confirm
+  `dirctl push` CID output format (the parser is defensive); confirm `dirctl search`
+  flags; ensure the gateway image has `dirctl` on PATH (or set `DIRCTL_BIN`); confirm
+  the `reconciler.env` keys. The README AGNTCY claims stay **planned** until
+  `VERIFY_DIRECTORY.md` passes on a networked Docker host.
+
 ## License
 
 Apache-2.0 preserved (`LICENSE` unchanged). No source files carried per-file SPDX

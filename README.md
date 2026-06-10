@@ -265,6 +265,12 @@ Agents framework (Linux Foundation). Honest status of each piece:
   quantum-safe AGNTCY SLIM is a future item.
 - **Observability — planned (v2).** No OpenTelemetry tracing is wired today.
 
+> **In progress:** wiring to the *real* AGNTCY Directory — the `dir-apiserver`
+> gRPC service + `zot` OCI registry + `postgres` + `reconciler`, driven through the
+> official `dirctl` client — is drafted on branch `feat/agntcy-directory-real` and is
+> **pending live verification** on a networked Docker host (see `VERIFY_DIRECTORY.md`).
+> The directory/discovery items above remain **planned** until that verification passes.
+
 **What is real and load-bearing:** a registry-driven gateway fronting 8 real external
 MCP servers plus INFER, with a validated OASF 1.0.0 capability record per server.
 
