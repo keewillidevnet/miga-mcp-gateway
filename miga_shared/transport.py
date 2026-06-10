@@ -30,6 +30,41 @@ from miga_shared.registry import ServerSpec
 
 logger = logging.getLogger("miga.transport")
 
+# Cap on forwarded downstream tool output. Untrusted upstream servers could return
+# oversized payloads; the gateway/bot should never receive an unbounded blob.
+MAX_TOOL_RESPONSE_CHARS = int(os.getenv("MIGA_MAX_TOOL_RESPONSE_CHARS", "50000"))
+
+# Minimal base environment handed to spawned stdio subprocesses. Anything outside
+# this set (and the server's own declared env_required) is withheld so a single
+# upstream process never receives the whole credential set. See SECURITY notes.
+_BASE_ENV_ALLOWLIST = frozenset(
+    {
+        "PATH",
+        "HOME",
+        "LANG",
+        "LC_ALL",
+        "LC_CTYPE",
+        "TZ",
+        "TERM",
+        "PYTHONPATH",
+        "PYTHONUNBUFFERED",
+        "PYTHONIOENCODING",
+        "SYSTEMROOT",
+        "TEMP",
+        "TMP",
+        "TMPDIR",
+        "USERPROFILE",
+        "HOMEDRIVE",
+        "HOMEPATH",
+    }
+)
+
+
+def _truncate(text: str) -> str:
+    if len(text) > MAX_TOOL_RESPONSE_CHARS:
+        return text[:MAX_TOOL_RESPONSE_CHARS] + "\n…[truncated by MIGA gateway]"
+    return text
+
 
 class MCPTransportError(Exception):
     """Raised when a downstream MCP server cannot be reached or returns an error."""
@@ -50,8 +85,8 @@ def _normalize_result(result: Any) -> Any:
         if text is not None:
             texts.append(text)
     if getattr(result, "isError", False):
-        raise MCPTransportError("; ".join(texts) or "downstream tool error")
-    return "\n".join(texts) if texts else content
+        raise MCPTransportError(_truncate("; ".join(texts)) or "downstream tool error")
+    return _truncate("\n".join(texts)) if texts else content
 
 
 class MCPClientPool:
@@ -65,6 +100,22 @@ class MCPClientPool:
     def __init__(self, *, environ: dict[str, str] | None = None, timeout: float = 60.0):
         self._environ = environ if environ is not None else os.environ
         self._timeout = timeout
+
+    # -- helpers --------------------------------------------------------------
+
+    def _child_env(self, spec: ServerSpec) -> dict[str, str]:
+        """Build a least-privilege environment for a spawned stdio subprocess.
+
+        Only a minimal base allowlist plus the server's own declared
+        ``env_required`` are passed through, so one upstream process never sees
+        another platform's secrets (e.g. the SD-WAN container does not receive the
+        ServiceNow or NetBox credentials)."""
+        env: dict[str, str] = {k: v for k, v in self._environ.items() if k in _BASE_ENV_ALLOWLIST}
+        for name in spec.env_required:
+            val = self._environ.get(name)
+            if val is not None:
+                env[name] = val
+        return env
 
     # -- session construction -------------------------------------------------
 
@@ -103,9 +154,9 @@ class MCPClientPool:
             command = spec.command
             if not command:
                 raise MCPTransportError(f"{spec.name}: stdio transport missing command")
-            # Pass declared env through to the child (covers `docker run -e VAR`,
-            # which reads VAR from the gateway's environment).
-            child_env = dict(self._environ)
+            # Least-privilege env: base allowlist + this server's declared vars only
+            # (covers `docker run -e VAR`, which reads VAR from this environment).
+            child_env = self._child_env(spec)
             params = StdioServerParameters(command=command, args=spec.args, env=child_env)
             async with (
                 stdio_client(params) as (read, write),

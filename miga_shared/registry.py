@@ -88,7 +88,17 @@ class ServerSpec:
         if auth.get("type") == "bearer":
             token_env = auth.get("token_env")
             token = env.get(token_env, "") if token_env else ""
-            if token:
+            url = self.url or ""
+            if token and not url.startswith("https://"):
+                # Refuse to send a bearer token over a non-TLS endpoint — prevents
+                # token leakage / exfiltration if the URL (or its ${ENV} host) is
+                # tampered with. Fails closed: no Authorization header is attached.
+                logger.error(
+                    "Server %s: refusing to attach bearer token to non-https URL %r",
+                    self.name,
+                    url,
+                )
+            elif token:
                 headers["Authorization"] = f"Bearer {token}"
             else:
                 logger.warning(

@@ -184,3 +184,49 @@ async def test_unsupported_transport_raises():
     )
     with pytest.raises(MCPTransportError):
         await pool.list_tools(bad)
+
+
+class TestChildEnvScoping:
+    def test_only_declared_and_base_env_passed(self):
+        from miga_shared.transport import _BASE_ENV_ALLOWLIST, MCPClientPool
+
+        spec = ServerSpec(
+            name="sdwan",
+            display_name="SD-WAN",
+            status="community",
+            roles=["automation"],
+            transport={"type": "stdio", "command": "docker", "args": ["run", "-i"]},
+            oasf_record="x.json",
+            env_required=["VMANAGE_HOST", "VMANAGE_PASSWORD"],
+        )
+        environ = {
+            "PATH": "/usr/bin",
+            "VMANAGE_HOST": "vm.local",
+            "VMANAGE_PASSWORD": "vmpw",
+            # secrets belonging to OTHER servers must NOT leak into this child:
+            "SERVICENOW_PASSWORD": "snow-secret",
+            "NETBOX_TOKEN": "nb-secret",
+            "TE_TOKEN": "te-secret",
+        }
+        pool = MCPClientPool(environ=environ)
+        env = pool._child_env(spec)
+        assert env["VMANAGE_HOST"] == "vm.local"
+        assert env["VMANAGE_PASSWORD"] == "vmpw"
+        assert "PATH" in env and "PATH" in _BASE_ENV_ALLOWLIST
+        for leaked in ("SERVICENOW_PASSWORD", "NETBOX_TOKEN", "TE_TOKEN"):
+            assert leaked not in env
+
+
+class TestOutputCap:
+    def test_oversized_text_truncated(self, monkeypatch):
+        import miga_shared.transport as tmod
+
+        monkeypatch.setattr(tmod, "MAX_TOOL_RESPONSE_CHARS", 100)
+        r = SimpleNamespace(
+            structuredContent=None,
+            content=[SimpleNamespace(text="x" * 5000)],
+            isError=False,
+        )
+        out = tmod._normalize_result(r)
+        assert len(out) < 200
+        assert "truncated by MIGA gateway" in out

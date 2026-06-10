@@ -70,6 +70,12 @@ services:
       redis:
         condition: service_healthy
     volumes:
+      # SECURITY: mounting the Docker socket grants the gateway root-equivalent
+      # control of the host. It is required only so the gateway can spawn the
+      # SD-WAN stdio image via `docker run -i`. Harden in production by either
+      # (a) running SD-WAN as a long-lived sidecar instead of socket-spawning, or
+      # (b) fronting the socket with a restricted proxy (e.g. tecnativa/docker-socket-proxy
+      # limited to container create/start), or (c) using rootless Docker. See MIGRATION.md.
       - /var/run/docker.sock:/var/run/docker.sock  # for SD-WAN `docker run -i`
     networks:
       - miga

@@ -38,35 +38,43 @@ and risk scoring across platforms.
 ## Architecture
 
 ```
-┌───────────────────────────────────────────────────────────────────┐
-│                        WebEx Bot (Python)                           │
-│          NLP Intent → MCP Client → Adaptive Cards → HITL            │
-│                     [AGNTCY Identity Badge]                         │
-└──────────────────────────────┬──────────────────────────────────────┘
-                               │ JSON-RPC 2.0 (MCP)
-┌──────────────────────────────▼──────────────────────────────────────┐
-│                     Gateway MCP Server (Python)                      │
-│   Registry-driven routing  ──  config/server-registry.yaml           │
-│   AGNTCY Directory + OASF capability lookup (dynamic discovery)      │
-│   6 Roles: Observability │ Security │ Automation │ Configuration     │
-│            Compliance │ Identity                                     │
-│   MCP CLIENT transports: HTTP/SSE URLs  +  stdio (incl. docker run -i)│
-└──┬────────┬────────┬────────┬─────────┬──────────┬────────────────────┘
-   │ http   │ http   │ http   │ stdio   │ stdio    │ stdio
-   ▼        ▼        ▼        ▼         ▼          ▼
-┌────────┐┌───────┐┌───────┐┌────────┐┌─────────┐┌───────────┐
-│Thousand││Splunk ││Meraki ││ SD-WAN ││Catalyst ││ServiceNow │
-│Eyes    ││       ││       ││        ││Center   ││           │
-│(remote)││(remote)│(compose)│(docker)││(stdio)  ││(stdio)    │
-└────────┘└───────┘└───────┘└────────┘└─────────┘└───────────┘
-┌────────┐┌───────┐                          ┌────────────────────┐
-│  ISE   ││NetBox ││   normalized output ───▶ │       INFER        │
-│(compose)│(compose,│                         │   Fusion Engine    │
-│        ││read-only)│                        │  (MIGA-original)   │
-└────────┘└───────┘                          │ Correlation · RCA  │
-   All servers publish OASF records ──▶       │ Anomaly · Predict  │
-   AGNTCY Directory (dynamic discovery)        │ Risk Score         │
-                                              └────────────────────┘
+┌────────────────────────────────────────────────────────────────────────────┐
+│                             WebEx Bot (Python)                             │
+│             NLP Intent -> MCP Client -> Adaptive Cards -> HITL             │
+│                          [AGNTCY Identity Badge]                           │
+└────────────────────────────────────────────────────────────────────────────┘
+                                       │                                      
+                                       │ JSON-RPC 2.0 (MCP)
+                                       ▼                                      
+┌────────────────────────────────────────────────────────────────────────────┐
+│                        Gateway MCP Server (Python)                         │
+│           Registry-driven routing  (config/server-registry.yaml)           │
+│                 AGNTCY Directory + OASF capability lookup                  │
+│               6 Roles: Observability | Security | Automation               │
+│                   Configuration | Compliance | Identity                    │
+│        MCP CLIENT transports: HTTP/SSE URLs + stdio (docker run -i)        │
+└────────────────────────────────────────────────────────────────────────────┘
+         │                   │                   │                   │        
+         ▼                   ▼                   ▼                   ▼        
+┌────────────────┐  ┌────────────────┐  ┌────────────────┐  ┌────────────────┐
+│  ThousandEyes  │  │     Splunk     │  │     Meraki     │  │     SD-WAN     │
+│     Cisco      │  │                │  │     Cisco      │  │     Cisco      │
+│  remote·http   │  │  remote·http   │  │  compose·http  │  │  docker·stdio  │
+└────────────────┘  └────────────────┘  └────────────────┘  └────────────────┘
+
+┌────────────────┐  ┌────────────────┐  ┌────────────────┐  ┌────────────────┐
+│    Catalyst    │  │   ServiceNow   │  │      ISE       │  │     NetBox     │
+│     Center     │  │                │  │     Cisco      │  │   read-only    │
+│  local·stdio   │  │  local·stdio   │  │  compose·http  │  │  compose·http  │
+└────────────────┘  └────────────────┘  └────────────────┘  └────────────────┘
+
+All 8 servers + INFER publish OASF records to the AGNTCY Directory
+(dynamic discovery). INFER consumes their normalized output:
+
+┌────────────────────────────────────────────────────────────────────────────┐
+│                   INFER — Fusion Engine (MIGA-original)                    │
+│         Correlation · Root Cause · Anomaly · Predict · Risk Score          │
+└────────────────────────────────────────────────────────────────────────────┘
 ```
 
 The gateway never re-vendors upstream server logic. It opens an MCP client session
