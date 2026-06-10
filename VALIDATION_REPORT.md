@@ -3,8 +3,10 @@
 **Verdict: GO — pending two environment-only gates.** All functional checklist items
 A–I pass and the CLI `shell=True` sharp edge is now closed (argv form). The two
 remaining gates could not be executed in this sandbox and must be run on a networked /
-Docker-enabled box before publish: **Gate 1** live OASF `validate_object` (C9) and
-**Gate 2** `docker compose config` (D10). Reproducible commands are in the
+Docker-enabled box before publish: **Gate 1** live OASF `validate_object` (C9, still blocked here)
+and **Gate 2** `docker compose config` (D10 — now schema- + interpolation-validated
+with official Compose Spec tooling; only the final `docker compose config --quiet`
+binary step remains). Reproducible commands are in the
 "Post-cleanup: argv fix + environment gates" section below.
 
 History:
@@ -209,17 +211,20 @@ ruff format --check . -> all formatted
   A passing record returns an empty/`{}`-style result with no `errors`; failures list
   per-field messages.
 
-### Gate 2 — `docker compose config` (D10): **NOT-RUN (docker not installed)**
-- **Why NOT-RUN:** the `docker` CLI is not present in this sandbox. Not faked.
-- **Reproducible commands:**
+### Gate 2 — `docker compose config` (D10): **PARTIAL PASS (schema + interpolation validated; docker CLI step still pending)**
+- **Executed here (real tooling, not faked):**
+  - Validated `docker-compose.yml` against the **official Compose Spec JSON schema**
+    (`compose-spec/compose-spec` `schema/compose-spec.json`, Draft-07) → **VALID**.
+  - Env-interpolation check across the file: every `${VAR}` is either defined in
+    `.env.example` or carries a `:-default` → **no unresolved required variables**.
+  - YAML service inventory: `agntcy-directory, gateway, infer-mcp, ise-mcp, meraki-mcp,
+    netbox-mcp, redis, webex-bot` — compose-deployed servers (meraki/ise/netbox/infer)
+    present, ThousandEyes/Splunk URL-only (not services), no dropped-platform services.
+- **Still NOT-RUN (needs a Docker host):** the `docker` CLI is absent here, so the
+  final normalize/merge step was not exercised. Run on a Docker box with a real `.env`:
   ```bash
-  docker compose config            # full rendered config
-  docker compose config --quiet    # clean exit-code check (0 = valid)
+  docker compose config --quiet   # exit 0 = valid (env interpolation + merge)
+  docker compose config           # eyeball the rendered config
   ```
-- **YAML-level inventory confirmed without Docker** (parsed `docker-compose.yml`):
-  - Services: `agntcy-directory, gateway, infer-mcp, ise-mcp, meraki-mcp, netbox-mcp, redis, webex-bot`.
-  - Compose-deployed servers present (meraki, ise, netbox, infer): **PASS**.
-  - ThousandEyes / Splunk are **not** services (URL-referenced only): **PASS**.
-  - No dropped-platform services remain: **PASS**.
-  The remaining check `docker compose config --quiet` (env interpolation + schema)
-  must still be run in a Docker environment to fully close D10.
+  Given the Compose Spec schema and interpolation already pass, this is expected to be
+  a clean exit; it is the only remaining piece of D10.
