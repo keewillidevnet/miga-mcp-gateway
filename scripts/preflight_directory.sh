@@ -19,7 +19,7 @@ IMAGES=(
   "ghcr.io/agntcy/dir-apiserver:v1.3.0"
   "ghcr.io/agntcy/dir-reconciler:v1.3.0"
   "ghcr.io/project-zot/zot:v2.1.16"
-  "docker.io/bitnami/postgresql:latest@sha256:7651d7f24aad83fe68a222f7f20eded10d325c96ebee285ca5bf8162eddcba64"
+  "docker.io/bitnamilegacy/postgresql:16"
 )
 
 fail=0

@@ -38,6 +38,7 @@ from miga_shared.registry import ServerSpec, load_registry
 from miga_shared.transport import MCPClientPool, MCPTransportError
 from miga_shared.utils.redis_bus import RedisPubSub
 
+logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("miga.gateway")
 
 _REPO_ROOT = Path(__file__).resolve().parent.parent.parent
@@ -119,10 +120,6 @@ async def _publish_oasf_records(directory: DirectoryClient, specs: list[ServerSp
             record = json.loads(record_path.read_text(encoding="utf-8"))
             await directory.register_record(record)
             published += 1
-        except AttributeError:
-            # DirectoryClient without register_record: skip gracefully.
-            logger.debug("DirectoryClient has no register_record; skipping publish")
-            break
         except Exception as exc:  # pragma: no cover - network failure path
             logger.warning("Failed to publish OASF record for %s: %s", spec.name, exc)
     return published
@@ -147,7 +144,8 @@ async def app_lifespan():
 
     specs = load_registry()
     routing.load_from_registry(specs)
-    await _publish_oasf_records(directory, specs)
+    _published = await _publish_oasf_records(directory, specs)
+    logger.info("Published %d/%d OASF records to AGNTCY Directory", _published, len(specs))
 
     async def _refresh_loop():
         while True:
@@ -174,7 +172,7 @@ async def app_lifespan():
         await directory.close()
 
 
-mcp = FastMCP("miga_gateway", lifespan=app_lifespan)
+mcp = FastMCP("miga_gateway", lifespan=app_lifespan, host="0.0.0.0", port=int(os.getenv("MIGA_GATEWAY_PORT", "8000")))
 
 
 # ---------------------------------------------------------------------------
@@ -373,5 +371,4 @@ async def gateway_health(ctx=None) -> str:
 
 
 if __name__ == "__main__":
-    port = int(os.getenv("MIGA_GATEWAY_PORT", "8000"))
-    mcp.run(transport="streamable_http", port=port)
+    mcp.run(transport="streamable-http")
