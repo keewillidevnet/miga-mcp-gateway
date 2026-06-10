@@ -119,6 +119,24 @@ class DirectoryClient:
             logger.error("Registration failed: %s", e)
             return "error"
 
+    async def register_record(self, record: dict[str, Any]) -> str:
+        """Publish a raw OASF capability record (the JSON document from
+        ``oasf/records/*.record.json``) into the directory. Used by the gateway to
+        keep dynamic discovery working for the external servers it routes to.
+        Returns the assigned CID, or 'standalone'/'error' if the directory is
+        unavailable. Secrets/connection details are NOT part of the record."""
+        try:
+            resp = await self._http.post(f"{self.url}/v1/records", json=record)
+            resp.raise_for_status()
+            body = resp.json()
+            return body.get("cid", body.get("id", "unknown"))
+        except httpx.ConnectError:
+            logger.warning("AGNTCY Directory unavailable — OASF record not published")
+            return "standalone"
+        except Exception as e:
+            logger.error("OASF record publish failed: %s", e)
+            return "error"
+
     async def discover(
         self,
         skills: Optional[list[str]] = None,

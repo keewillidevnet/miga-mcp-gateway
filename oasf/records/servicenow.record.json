@@ -1,0 +1,46 @@
+{
+  "name": "ServiceNow ITSM MCP Server",
+  "description": "ServiceNow ITSM and workflow operations: incidents, changes, catalog, and knowledge for closed-loop incident management and automation across the network estate.",
+  "version": "1.0.0",
+  "schema_version": "1.0.4",
+  "authors": [
+    "Keenan Williams"
+  ],
+  "created_at": "2026-06-10T00:00:00Z",
+  "annotations": {
+    "miga_registry_ref": "servicenow"
+  },
+  "skills": [
+    {
+      "name": "workflow_automation",
+      "id": 1402
+    },
+    {
+      "name": "retrieval_of_information",
+      "id": 601
+    },
+    {
+      "name": "tool_use_planning",
+      "id": 1403
+    }
+  ],
+  "domains": [
+    {
+      "name": "incident_management",
+      "id": 10706
+    },
+    {
+      "name": "workflow_automation",
+      "id": 11002
+    }
+  ],
+  "modules": [],
+  "locators": [
+    {
+      "type": "source_code",
+      "urls": [
+        "https://github.com/echelon-ai-labs/servicenow-mcp"
+      ]
+    }
+  ]
+}

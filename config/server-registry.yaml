@@ -1,0 +1,183 @@
+# MIGA downstream MCP server registry
+# Validated by: config/server-registry.schema.json
+#
+# Rules:
+#   - Secrets NEVER live here. Only env var NAMES are referenced; values go in .env.
+#   - "transport" = how the gateway connects (http URL or spawned stdio process).
+#   - "deployment" = how the server is provisioned (separate concern from transport).
+#   - VERIFY every endpoint, command, port, and env var name against the upstream
+#     repo README during the refactor. Where this file and upstream disagree,
+#     follow upstream and record the change in MIGRATION.md.
+
+version: "1.0.0"
+
+servers:
+  # ---- Cisco official, remote-hosted (HTTP) ----
+  - name: thousandeyes
+    display_name: "Cisco ThousandEyes"
+    status: official
+    source: "https://github.com/CiscoDevNet/ThousandEyes-MCP-Server-official"
+    roles: [observability]
+    transport:
+      type: http
+      url: "https://api.thousandeyes.com/mcp"
+      auth:
+        type: bearer
+        token_env: TE_TOKEN
+    deployment:
+      kind: remote_managed
+      notes: "Cisco-hosted (docs-only repo). Org must not be opted out of ThousandEyes AI features. MIGA injects Authorization: Bearer ${TE_TOKEN}. Upstream examples name the proxy env AUTH_TOKEN; TE_TOKEN is MIGA-side. Not read-only. See MIGRATION.md."
+    env_required: [TE_TOKEN]
+    oasf_record: "oasf/records/thousandeyes.record.json"
+    enabled: true
+
+  - name: splunk
+    display_name: "Splunk (Cisco)"
+    status: official
+    source: "https://github.com/CiscoDevNet/Splunk-MCP-Server-official"
+    roles: [observability, security]
+    transport:
+      type: http
+      url: "https://${SPLUNK_HOST}:8089/services/mcp"
+      auth:
+        type: bearer
+        token_env: SPLUNK_TOKEN
+    deployment:
+      kind: remote_managed
+      notes: "Hosted inside the Splunk instance management port (Splunk LLC product, distributed via Cisco). MIGA injects Authorization: Bearer ${SPLUNK_TOKEN}; SPLUNK_HOST templated into URL. Self-signed certs common. See MIGRATION.md."
+    env_required: [SPLUNK_HOST, SPLUNK_TOKEN]
+    oasf_record: "oasf/records/splunk.record.json"
+    enabled: true
+
+  # ---- CiscoDevNet community ----
+  - name: meraki
+    display_name: "Cisco Meraki"
+    status: cisco_devnet_community
+    source: "https://github.com/CiscoDevNet/meraki-magic-mcp-community"
+    roles: [observability, configuration, security]
+    transport:
+      type: http
+      url: "http://meraki-mcp:8000/mcp"
+    deployment:
+      kind: docker_compose
+      compose_service: meraki-mcp
+      ports: ["8000"]
+      notes: "Use the dynamic variant (meraki-mcp-dynamic.py) over StreamableHTTP at /mcp. Set MCP_TRANSPORT=http and MCP_HOST=0.0.0.0 in compose (verified upstream)."
+    env_required: [MERAKI_API_KEY, MERAKI_ORG_ID]
+    oasf_record: "oasf/records/meraki.record.json"
+    enabled: true
+
+  - name: sdwan
+    display_name: "Cisco Catalyst SD-WAN (vManage)"
+    status: cisco_devnet_community
+    source: "https://github.com/CiscoDevNet/catalyst-sdwan-mcp-community"
+    roles: [configuration, automation]
+    transport:
+      type: stdio
+      command: "docker"
+      args:
+        - "run"
+        - "-i"
+        - "--rm"
+        - "-e"
+        - "VMANAGE_HOST"
+        - "-e"
+        - "VMANAGE_PORT"
+        - "-e"
+        - "VMANAGE_USERNAME"
+        - "-e"
+        - "VMANAGE_PASSWORD"
+        - "catalyst-sdwan-mcp:latest"
+    deployment:
+      kind: docker_image
+      image: "catalyst-sdwan-mcp:latest"
+      notes: "Upstream ships a `docker run -i` stdio server. SD-WAN routers reached only via vManage."
+    env_required: [VMANAGE_HOST, VMANAGE_PORT, VMANAGE_USERNAME, VMANAGE_PASSWORD]
+    oasf_record: "oasf/records/sdwan.record.json"
+    enabled: true
+
+  # ---- Community ----
+  - name: catalyst_center
+    display_name: "Cisco Catalyst Center"
+    status: community
+    source: "https://github.com/richbibby/catalyst-center-mcp"
+    roles: [observability, configuration, automation]
+    transport:
+      type: stdio
+      command: "fastmcp"
+      args: ["run", "/opt/catalyst-center-mcp/catalyst-center-mcp.py"]
+    deployment:
+      kind: local_process
+      repo: "https://github.com/richbibby/catalyst-center-mcp"
+      notes: "FastMCP stdio server bundled into the gateway image (or a sidecar). Verified upstream: entrypoint catalyst-center-mcp.py; env vars CCC_HOST/CCC_USER/CCC_PWD (NOT DNAC_*); CCC_HOST is a full URL; TLS verify forced off in upstream code. See MIGRATION.md."
+    env_required: [CCC_HOST, CCC_USER, CCC_PWD]
+    oasf_record: "oasf/records/catalyst_center.record.json"
+    enabled: true
+
+  - name: ise
+    display_name: "Cisco Identity Services Engine"
+    status: community
+    source: "https://github.com/pamosima/network-mcp-docker-suite"
+    roles: [identity, compliance]
+    transport:
+      type: http
+      url: "http://ise-mcp:8005/mcp"
+    deployment:
+      kind: docker_compose
+      compose_service: ise-mcp
+      ports: ["8005"]
+      notes: "ISE server from the network-mcp-docker-suite (based on the Capobianco/Bergman ISE ERS integration). Confirm path and env var names."
+    env_required: [ISE_HOST, ISE_USERNAME, ISE_PASSWORD]
+    oasf_record: "oasf/records/ise.record.json"
+    enabled: true
+
+  - name: servicenow
+    display_name: "ServiceNow ITSM"
+    status: community
+    source: "https://github.com/echelon-ai-labs/servicenow-mcp"
+    roles: [automation, observability]
+    transport:
+      type: stdio
+      command: "python"
+      args: ["-m", "servicenow_mcp.cli"]
+    deployment:
+      kind: local_process
+      notes: "Chosen: echelon-ai-labs/servicenow-mcp (formerly osomai/servicenow-mcp), best-maintained community server. stdio via `python -m servicenow_mcp.cli`. Read/write upstream; restrict surface with MCP_TOOL_PACKAGE and a least-privilege ServiceNow account. See MIGRATION.md."
+    env_required: [SERVICENOW_INSTANCE_URL, SERVICENOW_USERNAME, SERVICENOW_PASSWORD, SERVICENOW_AUTH_TYPE, MCP_TOOL_PACKAGE]
+    oasf_record: "oasf/records/servicenow.record.json"
+    enabled: true
+
+  # ---- Vendor official (non-Cisco) ----
+  - name: netbox
+    display_name: "NetBox (NetBox Labs)"
+    status: official
+    source: "https://github.com/netboxlabs/netbox-mcp-server"
+    roles: [configuration, compliance]
+    transport:
+      type: http
+      url: "http://netbox-mcp:8000/mcp"
+    deployment:
+      kind: docker_compose
+      compose_service: netbox-mcp
+      ports: ["8000"]
+      notes: "Official read-only server. Run with TRANSPORT=http. Use a read-only NetBox API token."
+    env_required: [NETBOX_URL, NETBOX_TOKEN]
+    oasf_record: "oasf/records/netbox.record.json"
+    enabled: true
+
+  # ---- MIGA-original (kept; not an external server) ----
+  - name: infer
+    display_name: "INFER (Infrastructure Network Fusion Engine for Reasoning)"
+    status: miga_original
+    source: "internal: packages/servers/infer_mcp"
+    roles: [observability, security, compliance]
+    transport:
+      type: stdio
+      command: "python"
+      args: ["-m", "servers.infer_mcp"]
+    deployment:
+      kind: local_process
+      notes: "MIGA's own cross-platform fusion engine. Do not modify its internals during the migration; only register it here. Confirm the actual module entrypoint."
+    env_required: []
+    oasf_record: "oasf/records/infer.record.json"
+    enabled: true

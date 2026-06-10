@@ -1,0 +1,126 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://github.com/keewillidevnet/miga-mcp-gateway/config/server-registry.schema.json",
+  "title": "MIGA Server Registry",
+  "description": "Registry of downstream MCP servers the MIGA gateway routes to. Each entry tells the gateway how to reach a real MCP server, which role categories it serves, and where its OASF capability record lives. Secrets never appear here; only env var names are referenced.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "servers"],
+  "properties": {
+    "version": {
+      "type": "string",
+      "description": "Registry document version (semver)."
+    },
+    "servers": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/definitions/server" }
+    }
+  },
+  "definitions": {
+    "role": {
+      "type": "string",
+      "enum": ["observability", "security", "automation", "configuration", "compliance", "identity"]
+    },
+    "server": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "display_name", "status", "transport", "roles", "oasf_record", "enabled"],
+      "properties": {
+        "name": {
+          "type": "string",
+          "pattern": "^[a-z0-9_]+$",
+          "description": "Stable machine id, e.g. thousandeyes."
+        },
+        "display_name": { "type": "string" },
+        "status": {
+          "type": "string",
+          "enum": ["official", "cisco_devnet_community", "community", "miga_original"]
+        },
+        "source": {
+          "type": "string",
+          "description": "Upstream repo URL or hosted endpoint reference, for provenance."
+        },
+        "roles": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/definitions/role" }
+        },
+        "transport": { "$ref": "#/definitions/transport" },
+        "deployment": { "$ref": "#/definitions/deployment" },
+        "env_required": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Names of env vars that must be present at runtime. Values live in .env, never in this file."
+        },
+        "oasf_record": {
+          "type": "string",
+          "description": "Repo-relative path to this server's OASF capability record JSON."
+        },
+        "enabled": { "type": "boolean" }
+      }
+    },
+    "transport": {
+      "type": "object",
+      "description": "How the gateway connects to the server as an MCP client.",
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "required": ["type", "url"],
+          "properties": {
+            "type": { "const": "http" },
+            "url": {
+              "type": "string",
+              "description": "MCP endpoint URL. May contain ${ENV} placeholders resolved from .env."
+            },
+            "auth": { "$ref": "#/definitions/auth" },
+            "headers": {
+              "type": "object",
+              "additionalProperties": { "type": "string" }
+            }
+          }
+        },
+        {
+          "additionalProperties": false,
+          "required": ["type", "command"],
+          "properties": {
+            "type": { "const": "stdio" },
+            "command": { "type": "string" },
+            "args": { "type": "array", "items": { "type": "string" } },
+            "cwd": { "type": "string" }
+          }
+        }
+      ]
+    },
+    "auth": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type"],
+      "properties": {
+        "type": { "type": "string", "enum": ["none", "bearer", "oauth2"] },
+        "token_env": {
+          "type": "string",
+          "description": "Name of the env var holding the bearer token. Required when type is bearer."
+        }
+      }
+    },
+    "deployment": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "How the server process is provisioned. Separate from transport, which is how the gateway talks to it.",
+      "required": ["kind"],
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": ["remote_managed", "docker_compose", "docker_image", "local_process"]
+        },
+        "image": { "type": "string" },
+        "build_context": { "type": "string" },
+        "compose_service": { "type": "string" },
+        "ports": { "type": "array", "items": { "type": "string" } },
+        "repo": { "type": "string" },
+        "notes": { "type": "string" }
+      }
+    }
+  }
+}

@@ -45,11 +45,16 @@ class TestMIGARole:
 
 class TestPlatformType:
     def test_all_platforms_defined(self):
+        # The PlatformType enum is part of miga_shared and is intentionally left
+        # intact by the real-server migration (INFER and several models still
+        # reference it). It enumerates all platform identifiers MIGA has ever
+        # modeled, independent of which servers are currently registered.
         platforms = list(PlatformType)
-        assert len(platforms) == 13
+        assert len(platforms) == 15
         assert PlatformType.CATALYST_CENTER in platforms
         assert PlatformType.INFER in platforms
-        assert PlatformType.HYPERSHIELD in platforms
+        assert PlatformType.SERVICENOW in platforms
+        assert PlatformType.NETBOX in platforms
 
 
 class TestToolResponse:

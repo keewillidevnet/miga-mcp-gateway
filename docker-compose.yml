@@ -1,25 +1,24 @@
 # MIGA — Docker Compose (local development / demo)
 # Usage: docker compose up -d
-# All services start with mock-friendly defaults.
-
-x-server-base: &server-base
-  build:
-    context: .
-    dockerfile: Dockerfile
-    target: server
-  env_file: .env
-  depends_on:
-    redis:
-      condition: service_healthy
-  networks:
-    - miga
-  restart: unless-stopped
+#
+# Post real-server migration: the platform layer is now REAL, external MCP servers
+# that the gateway connects to as an MCP client (driven by config/server-registry.yaml).
+# MIGA no longer ships home-grown platform server implementations — only INFER.
+#
+#   * remote_managed (ThousandEyes, Splunk) -> referenced by URL in the registry; NOT
+#     compose services.
+#   * docker_compose (Meraki, ISE, NetBox)  -> run as HTTP MCP services below, built
+#     from their upstream repos.
+#   * docker_image stdio (SD-WAN)           -> spawned on demand by the gateway via
+#     `docker run -i catalyst-sdwan-mcp:latest` (gateway mounts the Docker socket).
+#   * local_process stdio (Catalyst Center, ServiceNow) -> bundled into the gateway
+#     image and spawned as stdio subprocesses (fastmcp run / python -m).
+#   * INFER (MIGA-original)                  -> its own service, unchanged.
 
 services:
   # ==========================================================================
   # Infrastructure
   # ==========================================================================
-
   redis:
     image: redis:7-alpine
     ports:
@@ -49,9 +48,12 @@ services:
       - miga
 
   # ==========================================================================
-  # Gateway
+  # Gateway (MCP client to all downstream servers)
   # ==========================================================================
-
+  # The gateway bundles the stdio local_process servers (Catalyst Center via
+  # `fastmcp run`, ServiceNow via `python -m servicenow_mcp.cli`) and spawns the
+  # SD-WAN docker stdio image. It therefore mounts the Docker socket so it can run
+  # `docker run -i catalyst-sdwan-mcp:latest` on demand.
   gateway:
     build:
       context: .
@@ -67,14 +69,15 @@ services:
     depends_on:
       redis:
         condition: service_healthy
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock  # for SD-WAN `docker run -i`
     networks:
       - miga
     restart: unless-stopped
 
   # ==========================================================================
-  # WebEx Bot
+  # WebEx Bot (conversational interface — unchanged)
   # ==========================================================================
-
   webex-bot:
     build:
       context: .
@@ -93,99 +96,67 @@ services:
     restart: unless-stopped
 
   # ==========================================================================
-  # Fully Implemented MCP Servers
+  # Real external MCP servers (docker_compose deployment)
+  # Build each from its upstream repo, then `docker compose up`.
   # ==========================================================================
 
-  catalyst-center-mcp:
-    <<: *server-base
-    build:
-      context: .
-      dockerfile: Dockerfile
-      target: server
-      args:
-        SERVER_NAME: catalyst_center_mcp
-    environment:
-      - PORT=8001
-      - MIGA_REDIS_URL=redis://redis:6379/0
-      - AGNTCY_DIRECTORY_URL=http://agntcy-directory:8500
-    ports:
-      - "8001:8001"
-
+  # Cisco Meraki — CiscoDevNet/meraki-magic-mcp-community (dynamic, StreamableHTTP)
+  # Build: git clone https://github.com/CiscoDevNet/meraki-magic-mcp-community && docker build -t meraki-magic-mcp:latest .
   meraki-mcp:
-    <<: *server-base
-    build:
-      context: .
-      dockerfile: Dockerfile
-      target: server
-      args:
-        SERVER_NAME: meraki_mcp
+    image: meraki-magic-mcp:latest
+    env_file: .env
     environment:
-      - PORT=8002
-      - MIGA_REDIS_URL=redis://redis:6379/0
-      - AGNTCY_DIRECTORY_URL=http://agntcy-directory:8500
+      - MCP_TRANSPORT=http
+      - MCP_HOST=0.0.0.0
+      - MCP_PORT=8000
+      - MCP_SERVER=dynamic        # uses meraki-mcp-dynamic.py
+      - READ_ONLY_MODE=true
+      - MERAKI_API_KEY=${MERAKI_API_KEY}
+      - MERAKI_ORG_ID=${MERAKI_ORG_ID}
     ports:
-      - "8002:8002"
+      - "8000"
+    networks:
+      - miga
+    restart: unless-stopped
 
-  thousandeyes-mcp:
-    <<: *server-base
-    build:
-      context: .
-      dockerfile: Dockerfile
-      target: server
-      args:
-        SERVER_NAME: thousandeyes_mcp
+  # Cisco ISE — pamosima/network-mcp-docker-suite (ise-mcp-server, StreamableHTTP)
+  # Build: from the suite's ./ise-mcp-server build context.
+  ise-mcp:
+    image: network-mcp-ise:latest
+    env_file: .env
     environment:
-      - PORT=8003
-      - MIGA_REDIS_URL=redis://redis:6379/0
-      - AGNTCY_DIRECTORY_URL=http://agntcy-directory:8500
+      - MCP_HOST=0.0.0.0
+      - MCP_PORT=8005
+      - ISE_HOST=${ISE_HOST}
+      - ISE_USERNAME=${ISE_USERNAME}
+      - ISE_PASSWORD=${ISE_PASSWORD}
+      - ISE_VERIFY_SSL=${ISE_VERIFY_SSL:-true}
     ports:
-      - "8003:8003"
+      - "8005"
+    networks:
+      - miga
+    restart: unless-stopped
 
-  webex-mcp:
-    <<: *server-base
-    build:
-      context: .
-      dockerfile: Dockerfile
-      target: server
-      args:
-        SERVER_NAME: webex_mcp
+  # NetBox — netboxlabs/netbox-mcp-server (read-only, StreamableHTTP)
+  # Build: git clone https://github.com/netboxlabs/netbox-mcp-server && docker build -t netbox-mcp-server:latest .
+  netbox-mcp:
+    image: netbox-mcp-server:latest
+    env_file: .env
     environment:
-      - PORT=8004
-      - MIGA_REDIS_URL=redis://redis:6379/0
-      - AGNTCY_DIRECTORY_URL=http://agntcy-directory:8500
+      - TRANSPORT=http
+      - HOST=0.0.0.0
+      - PORT=8000
+      - NETBOX_URL=${NETBOX_URL}
+      - NETBOX_TOKEN=${NETBOX_TOKEN}
     ports:
-      - "8004:8004"
+      - "8000"
+    networks:
+      - miga
+    restart: unless-stopped
 
-  xdr-mcp:
-    <<: *server-base
-    build:
-      context: .
-      dockerfile: Dockerfile
-      target: server
-      args:
-        SERVER_NAME: xdr_mcp
-    environment:
-      - PORT=8005
-      - MIGA_REDIS_URL=redis://redis:6379/0
-      - AGNTCY_DIRECTORY_URL=http://agntcy-directory:8500
-    ports:
-      - "8005:8005"
-
-  security-cloud-control-mcp:
-    <<: *server-base
-    build:
-      context: .
-      dockerfile: Dockerfile
-      target: server
-      args:
-        SERVER_NAME: security_cloud_control_mcp
-    environment:
-      - PORT=8006
-      - MIGA_REDIS_URL=redis://redis:6379/0
-      - AGNTCY_DIRECTORY_URL=http://agntcy-directory:8500
-    ports:
-      - "8006:8006"
-
+  # ==========================================================================
+  # INFER — MIGA-original fusion engine (unchanged)
+  # ==========================================================================
   infer-mcp:
     build:
       context: .
@@ -207,142 +178,9 @@ services:
       - miga
     restart: unless-stopped
 
-  # ==========================================================================
-  # Stub MCP Servers (Community Implementation Ready)
-  # ==========================================================================
-
-  appdynamics-mcp:
-    <<: *server-base
-    build:
-      context: .
-      dockerfile: Dockerfile
-      target: server
-      args:
-        SERVER_NAME: appdynamics_mcp
-    environment:
-      - PORT=8008
-      - MIGA_REDIS_URL=redis://redis:6379/0
-    ports:
-      - "8008:8008"
-    profiles:
-      - stubs
-
-  nexus-dashboard-mcp:
-    <<: *server-base
-    build:
-      context: .
-      dockerfile: Dockerfile
-      target: server
-      args:
-        SERVER_NAME: nexus_dashboard_mcp
-    environment:
-      - PORT=8009
-      - MIGA_REDIS_URL=redis://redis:6379/0
-    ports:
-      - "8009:8009"
-    profiles:
-      - stubs
-
-  sdwan-mcp:
-    <<: *server-base
-    build:
-      context: .
-      dockerfile: Dockerfile
-      target: server
-      args:
-        SERVER_NAME: sdwan_mcp
-    environment:
-      - PORT=8010
-      - MIGA_REDIS_URL=redis://redis:6379/0
-    ports:
-      - "8010:8010"
-    profiles:
-      - stubs
-
-  ise-mcp:
-    <<: *server-base
-    build:
-      context: .
-      dockerfile: Dockerfile
-      target: server
-      args:
-        SERVER_NAME: ise_mcp
-    environment:
-      - PORT=8011
-      - MIGA_REDIS_URL=redis://redis:6379/0
-    ports:
-      - "8011:8011"
-    profiles:
-      - stubs
-
-  splunk-mcp:
-    <<: *server-base
-    build:
-      context: .
-      dockerfile: Dockerfile
-      target: server
-      args:
-        SERVER_NAME: splunk_mcp
-    environment:
-      - PORT=8012
-      - MIGA_REDIS_URL=redis://redis:6379/0
-    ports:
-      - "8012:8012"
-    profiles:
-      - stubs
-
-  hypershield-mcp:
-    <<: *server-base
-    build:
-      context: .
-      dockerfile: Dockerfile
-      target: server
-      args:
-        SERVER_NAME: hypershield_mcp
-    environment:
-      - PORT=8013
-      - MIGA_REDIS_URL=redis://redis:6379/0
-    ports:
-      - "8013:8013"
-    profiles:
-      - stubs
-
-  servicenow-mcp:
-    <<: *server-base
-    build:
-      context: .
-      dockerfile: Dockerfile
-      target: server
-      args:
-        SERVER_NAME: servicenow_mcp
-    environment:
-      - PORT=8014
-      - MIGA_REDIS_URL=redis://redis:6379/0
-    ports:
-      - "8014:8014"
-    profiles:
-      - stubs
-
-  netbox-mcp:
-    <<: *server-base
-    build:
-      context: .
-      dockerfile: Dockerfile
-      target: server
-      args:
-        SERVER_NAME: netbox_mcp
-    environment:
-      - PORT=8015
-      - MIGA_REDIS_URL=redis://redis:6379/0
-    ports:
-      - "8015:8015"
-    profiles:
-      - stubs
-
 # ==========================================================================
 # Volumes & Networks
 # ==========================================================================
-
 volumes:
   redis-data:
   infer-data:

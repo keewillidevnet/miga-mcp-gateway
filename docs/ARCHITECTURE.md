@@ -2,13 +2,16 @@
 
 ## Design Principles
 
-1. **Platform-based decomposition** — Each Cisco platform gets a dedicated MCP
-   server handling all operational roles for that platform. The Gateway provides
-   role-based abstractions on top.
+1. **Aggregation over reimplementation** — MIGA does not reimplement platform
+   integrations. The platform layer is made of **real, published MCP servers**.
+   The gateway connects to each as an MCP **client** over its native transport and
+   provides role-based abstractions on top. MIGA's only original server is INFER.
 
-2. **Dynamic discovery** — No hardcoded routing. Servers register OASF records
-   with the AGNTCY Directory; the Gateway discovers capabilities at startup
-   and refreshes periodically.
+2. **Config-driven, dynamic discovery** — No hardcoded routing or endpoints.
+   `config/server-registry.yaml` (validated against its JSON schema) is the single
+   source of truth for *how to connect*. Each server publishes an OASF record to the
+   AGNTCY Directory so capabilities are discoverable; the gateway refreshes the
+   registry periodically.
 
 3. **Intelligence layer** — INFER produces cross-platform insights (root cause
    analysis, anomaly correlation, predictive failure analysis) that no single
@@ -33,15 +36,20 @@ capability records.
 - Compliance — posture, drift, audit, certificates
 - Identity — sessions, authentication, profiling
 
-### Platform MCP Servers
+### External Platform MCP Servers (the platform layer)
 
-Each server wraps a single Cisco platform's REST API, exposing tools via
-FastMCP with Pydantic-typed inputs and Markdown-formatted outputs.
+The 8 platform servers are **external, published MCP servers** — MIGA routes to
+them; it does not host their logic. They are reached through the gateway's MCP
+client transport abstraction (`miga_shared/transport.py`):
 
-**Shared infrastructure per server:**
-- `miga_lifespan()` — Redis connect, AGNTCY register, health tool
-- `CiscoAPIClient` — Retry, rate-limit, auth injection
-- Event publishing to Redis for INFER consumption
+- **HTTP/SSE** — remote managed endpoints (ThousandEyes, Splunk) and compose-hosted
+  servers (Meraki, ISE, NetBox) over Streamable HTTP at their `/mcp` endpoints.
+- **stdio** — spawned subprocesses: the `docker run -i` pattern (SD-WAN) and bundled
+  local processes (Catalyst Center via `fastmcp run`, ServiceNow via `python -m`).
+
+`miga_shared/registry.py` loads and validates the registry, resolves `${ENV}`
+placeholders, and yields typed `ServerSpec` objects. The gateway maps roles to
+servers and forwards `tools/list` / `tools/call` — no upstream code is vendored.
 
 ### INFER (Intelligence Engine)
 
@@ -63,11 +71,11 @@ Subscribes to all platform telemetry via Redis pub/sub. Performs:
 
 ```
 User → WebEx Message → Bot Webhook → NLP Intent
-  → Gateway MCP Call → Fan out to Platform Servers
-  → Platform API calls → Results → Gateway aggregation
-  → Markdown/Card → WebEx Response
+  → Gateway MCP Call → role → registered servers (registry)
+  → MCP client transport (HTTP/SSE or stdio) → upstream MCP servers
+  → Results → Gateway aggregation → Markdown/Card → WebEx Response
 
-Platform Events → Redis pub/sub → INFER subscription
+Normalized server output → Redis pub/sub → INFER subscription
   → Correlation/Analysis → Published insights
   → Gateway surfaces via meta-tools
 ```
@@ -104,22 +112,22 @@ Platform Events → Redis pub/sub → INFER subscription
 
 ## Port Allocation
 
-| Service | Port |
-|---------|------|
+MIGA-owned services use fixed ports. External servers are reached per the registry:
+remote servers by URL, compose servers on their internal `/mcp` ports, and stdio
+servers over a spawned subprocess (no port).
+
+| Service | Port / Reach |
+|---------|--------------|
 | Gateway | 8000 |
-| Catalyst Center | 8001 |
-| Meraki | 8002 |
-| ThousandEyes | 8003 |
-| Webex | 8004 |
-| XDR | 8005 |
-| Security Cloud Control | 8006 |
-| INFER | 8007 |
-| AppDynamics (stub) | 8008 |
-| Nexus Dashboard (stub) | 8009 |
-| SD-WAN (stub) | 8010 |
-| ISE (stub) | 8011 |
-| Splunk (stub) | 8012 |
-| Hypershield (stub) | 8013 |
+| INFER (MIGA-original) | 8007 |
 | WebEx Bot | 9000 |
 | Redis | 6379 |
 | AGNTCY Directory | 8500 |
+| Cisco Meraki (compose) | 8000/mcp (internal) |
+| Cisco ISE (compose) | 8005/mcp (internal) |
+| NetBox (compose) | 8000/mcp (internal) |
+| Cisco ThousandEyes (remote) | https://api.thousandeyes.com/mcp |
+| Splunk (remote) | https://${SPLUNK_HOST}:8089/services/mcp |
+| Cisco Catalyst SD-WAN | stdio — `docker run -i catalyst-sdwan-mcp:latest` |
+| Cisco Catalyst Center | stdio — `fastmcp run catalyst-center-mcp.py` |
+| ServiceNow | stdio — `python -m servicenow_mcp.cli` |

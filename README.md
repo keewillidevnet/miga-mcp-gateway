@@ -1,72 +1,78 @@
 # MIGA - MCP Intelligence Gateway Architecture
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/python-3.11+-green.svg)](https://python.org)
-[![MCP](https://img.shields.io/badge/MCP-Streamable%20HTTP-purple.svg)](https://modelcontextprotocol.io)
+[![MCP](https://img.shields.io/badge/MCP-Streamable%20HTTP%20%2B%20stdio-purple.svg)](https://modelcontextprotocol.io)
 [![AGNTCY](https://img.shields.io/badge/AGNTCY-Native-orange.svg)](https://agntcy.org)
-[![Platforms](https://img.shields.io/badge/Platforms-15-red.svg)](#platform-coverage)
+[![Servers](https://img.shields.io/badge/Registered%20Servers-9-red.svg)](#platform-coverage)
 [![Code Style](https://img.shields.io/badge/code%20style-ruff-000000.svg)](https://github.com/astral-sh/ruff)
 [![Cisco Code Exchange](https://img.shields.io/badge/Cisco-Code%20Exchange-00bceb.svg)](https://developer.cisco.com/codeexchange/)
 
 
 
-> A unified intelligence layer that consolidates AI and ML data from multiple Cisco
-> operational platforms into a single, consistent interface for analysis, automation,
-> and decision support with conversational WebEx Chat integration.
+> A unified intelligence layer that **aggregates and fuses** AI/ML and operational
+> data from real, published MCP servers across the network ecosystem into a single,
+> consistent, role-based interface for analysis, automation, and decision support —
+> with a conversational WebEx Chat interface.
 
 ---
 
 ## Overview
 
-Modern enterprise networks run across dozens of Cisco platforms; Catalyst Center,
-Meraki, ThousandEyes, AppDynamics, Webex, XDR, Hypershield, and more. Each platform
-produces isolated telemetry and requires custom integrations. **MIGA solves this** by
-exposing every platform's AI/ML capabilities through a scalable MCP (Model Context
-Protocol) server cluster, enabling AI agents and automated workflows to operate with
-complete context, consistent data quality, and a governed interaction model.
+Modern enterprise networks span many platforms — Cisco ThousandEyes, Splunk, Cisco
+Meraki, Catalyst SD-WAN, Catalyst Center, ISE, ServiceNow, NetBox, and more. Each
+exposes its own MCP server, telemetry, and access model. **MIGA is the aggregation
+and fusion layer over that ecosystem.** Rather than reimplementing platform
+integrations, the MIGA gateway connects to each platform's *real, published MCP
+server* as an MCP **client**, routes by role, and adds cross-platform reasoning that
+no single platform can provide.
 
-Users interact with the cluster conversationally through a **WebEx Bot** that embeds
-an MCP Client, converting natural language into structured MCP tool calls via an NLP
-pipeline with results rendered as rich Adaptive Cards.
+Users interact conversationally through a **WebEx Bot** that embeds an MCP Client,
+converting natural language into structured MCP tool calls via an NLP pipeline, with
+results rendered as rich Adaptive Cards.
 
-The **INFER** (Infrastructure Network Fusion Engine for Reasoning) service continuously
-ingests cross-platform telemetry to perform predictive analysis, root cause analysis,
-anomaly correlation, and capacity planning that no individual platform can achieve alone.
+The **INFER** (Infrastructure Network Fusion Engine for Reasoning) service — MIGA's
+one original server — continuously ingests the normalized output of the registered
+servers to perform predictive analysis, root cause analysis, anomaly correlation,
+and risk scoring across platforms.
 
 ## Architecture
 
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│                     WebEx Bot (Python)                          │
-│        NLP Intent → MCP Client → Adaptive Cards → HITL          │
-│                   [AGNTCY Identity Badge]                       │
-└──────────────────────────┬──────────────────────────────────────┘
-                           │ JSON RPC 2.0
-┌──────────────────────────▼──────────────────────────────────────┐
-│                   Gateway MCP Server (Python)                   │
-│   Dynamic routing via AGNTCY Directory + OASF capability lookup │
-│   6 Role Categories: Observability │ Security │ Automation      │
-│                      Configuration │ Compliance │ Identity      │
-└──┬──────┬──────┬──────┬──────┬──────┬───────────────────────────┘
-   │      │      │      │      │      │        MCP │
-   ▼      ▼      ▼      ▼      ▼      ▼            ▼
-┌─────┐┌─────┐┌─────┐┌─────┐┌─────┐┌──────┐  ┌──────────────┐
-│CatC ││Mera-││Thou-││Webex││ XDR ││SecCld│  │    INFER     │
-│     ││ki   ││sand-││     ││     ││Ctrl  │  │   Fusion     │
-│     ││     ││Eyes ││     ││     ││      │  │   Engine     │
-└──┬──┘└──┬──┘└──┬──┘└──┬──┘└──┬──┘└──┬───┘  │              │
-   │      │      │      │      │      │      │  Correlation │
-   └──────└──────┴──────┴──────┴──────┘      │  RCA         │
-                       │                     │  Anomaly Det │
-                 Redis pub/sub               │  Prediction  │
-                       │                     │  Risk Score  │
-                       └────────────────────▶│              │
-                                             └──────────────┘
-┌─────┐┌─────┐┌─────┐┌─────┐┌─────┐┌──────┐┌──────┐┌──────┐
-│AppD ││Nexus││SDWAN││ ISE ││Splnk││Hyper ││ Snow ││NetBx │  ← Stubs
-│(stb)││(stb)││(stb)││(stb)││(stb)││(stb) ││(stb) ││(stb) │
-└─────┘└─────┘└─────┘└─────┘└─────┘└──────┘└──────┘└──────┘
-   All registered in ──► AGNTCY Directory (ADS)
+┌───────────────────────────────────────────────────────────────────┐
+│                        WebEx Bot (Python)                           │
+│          NLP Intent → MCP Client → Adaptive Cards → HITL            │
+│                     [AGNTCY Identity Badge]                         │
+└──────────────────────────────┬──────────────────────────────────────┘
+                               │ JSON-RPC 2.0 (MCP)
+┌──────────────────────────────▼──────────────────────────────────────┐
+│                     Gateway MCP Server (Python)                      │
+│   Registry-driven routing  ──  config/server-registry.yaml           │
+│   AGNTCY Directory + OASF capability lookup (dynamic discovery)      │
+│   6 Roles: Observability │ Security │ Automation │ Configuration     │
+│            Compliance │ Identity                                     │
+│   MCP CLIENT transports: HTTP/SSE URLs  +  stdio (incl. docker run -i)│
+└──┬────────┬────────┬────────┬─────────┬──────────┬────────────────────┘
+   │ http   │ http   │ http   │ stdio   │ stdio    │ stdio
+   ▼        ▼        ▼        ▼         ▼          ▼
+┌────────┐┌───────┐┌───────┐┌────────┐┌─────────┐┌───────────┐
+│Thousand││Splunk ││Meraki ││ SD-WAN ││Catalyst ││ServiceNow │
+│Eyes    ││       ││       ││        ││Center   ││           │
+│(remote)││(remote)│(compose)│(docker)││(stdio)  ││(stdio)    │
+└────────┘└───────┘└───────┘└────────┘└─────────┘└───────────┘
+┌────────┐┌───────┐                          ┌────────────────────┐
+│  ISE   ││NetBox ││   normalized output ───▶ │       INFER        │
+│(compose)│(compose,│                         │   Fusion Engine    │
+│        ││read-only)│                        │  (MIGA-original)   │
+└────────┘└───────┘                          │ Correlation · RCA  │
+   All servers publish OASF records ──▶       │ Anomaly · Predict  │
+   AGNTCY Directory (dynamic discovery)        │ Risk Score         │
+                                              └────────────────────┘
 ```
+
+The gateway never re-vendors upstream server logic. It opens an MCP client session
+over each server's native transport (declared in the registry) and forwards
+`tools/list` / `tools/call`. Connection details are **config-driven**, never
+hardcoded.
 
 ## Quick Start
 
@@ -74,16 +80,16 @@ anomaly correlation, and capacity planning that no individual platform can achie
 # Clone the repository
 git clone https://github.com/keewillidevnet/miga-mcp-gateway.git && cd miga-mcp-gateway
 
-# Copy environment template and add your API credentials
+# Copy environment template and add your credentials (grouped by platform)
 cp .env.example .env
 
-# Launch the full cluster (core services)
+# Build the external community server images referenced by docker-compose
+# (Meraki, ISE, NetBox, SD-WAN) from their upstream repos — see MIGRATION.md.
+
+# Launch core + compose-deployed servers
 docker compose up -d
 
-# Include stub servers too
-docker compose --profile stubs up -d
-
-# Check status
+# Check status (reachability of every registered server)
 python -m packages.cli.miga_cli status
 
 # Open WebEx and message the MIGA bot!
@@ -93,54 +99,44 @@ python -m packages.cli.miga_cli status
 
 ```
 miga-mcp-gateway/
-├── miga_shared/             # Shared library (auth, AGNTCY, formatters, models)
+├── config/
+│   ├── server-registry.yaml         # Authoritative: how the gateway connects to each server
+│   └── server-registry.schema.json  # JSON schema the registry is validated against
+├── oasf/
+│   ├── OASF_RECORDS.md              # OASF record authoring guide
+│   └── records/*.record.json        # One OASF capability record per registered server
+├── miga_shared/
+│   ├── registry.py                  # Registry loader (parse, validate, resolve ${ENV})
+│   ├── transport.py                 # MCP client transport: HTTP/SSE + stdio (docker run -i)
+│   └── ...                          # auth, AGNTCY, models, formatters
 ├── packages/
-│   ├── gateway/             # Gateway MCP Server (role-based routing)
-│   ├── webex_bot/           # WebEx Bot (NLP + MCP Client + Adaptive Cards)
-│   └── cli/                 # miga-cli deployment tool
+│   ├── gateway/                     # Gateway MCP Server (registry-driven role routing)
+│   ├── webex_bot/                   # WebEx Bot (NLP + MCP Client + Adaptive Cards)
+│   └── cli/                         # miga-cli tool
 ├── servers/
-│   ├── catalyst_center_mcp/ # Catalyst Center AI/ML         [Full]
-│   ├── meraki_mcp/          # Meraki Dashboard AI/ML        [Full]
-│   ├── thousandeyes_mcp/    # ThousandEyes AI Assurance     [Full]
-│   ├── webex_mcp/           # Webex AI Assistant            [Full]
-│   ├── xdr_mcp/             # Cisco XDR Threat Intel        [Full]
-│   ├── security_cloud_control_mcp/  # Security Cloud Ctrl   [Full]
-│   ├── infer_mcp/           # INFER Intelligence Engine     [Full]
-│   ├── appdynamics_mcp/     # AppDynamics                   [Stub]
-│   ├── nexus_dashboard_mcp/ # Nexus Dashboard               [Stub]
-│   ├── sdwan_mcp/           # SD-WAN                        [Stub]
-│   ├── ise_mcp/             # ISE                           [Stub]
-│   ├── splunk_mcp/          # Splunk                        [Stub]
-│   ├── hypershield_mcp/     # Hypershield                   [Stub]
-│   ├── servicenow_mcp/      # ServiceNow ITSM & AIOps      [Stub]
-│   └── netbox_mcp/          # NetBox DCIM & IPAM            [Stub]
-├── helm/miga/               # Helm charts for K8s deployment
-├── k8s/                     # Raw K8s manifests
-├── docs/                    # Documentation
-├── docker-compose.yml       # Local development cluster
-└── .env.example             # Environment template
+│   └── infer_mcp/                   # INFER fusion engine — MIGA's only original server
+├── helm/miga/                       # Helm chart (gateway, bot, INFER)
+├── docs/                            # Documentation
+├── docker-compose.yml               # Local cluster (core + compose servers)
+└── .env.example                     # Environment template (every registry env var)
 ```
 
 ## Platform Coverage
 
-| Platform | Status | Roles Served |
-|----------|--------|-------------|
-| Catalyst Center | ✅ Full | Observability, Configuration, Automation |
-| Meraki Dashboard | ✅ Full | Observability, Configuration, Security |
-| ThousandEyes | ✅ Full | Observability |
-| Webex | ✅ Full | Automation, Observability |
-| Cisco XDR | ✅ Full | Security |
-| Security Cloud Control | ✅ Full | Security, Configuration, Compliance |
-| INFER | ✅ Full | Observability, Security, Compliance |
-| AppDynamics | 🔲 Stub | Observability |
-| Nexus Dashboard | 🔲 Stub | Observability, Configuration |
-| SD-WAN | 🔲 Stub | Configuration, Automation |
-| ISE | 🔲 Stub | Identity, Compliance |
-| Splunk | 🔲 Stub | Observability, Security |
-| Hypershield | 🔲 Stub | Security |
-| ServiceNow | 🔲 Stub | Automation, Observability |
-| NetBox | 🔲 Stub | Configuration, Compliance |
+The gateway routes to **8 real external MCP servers** plus the MIGA-original INFER
+engine. Connection details for every row live in `config/server-registry.yaml`.
 
+| Platform | Status | Source / Endpoint | Roles Served |
+|----------|--------|-------------------|--------------|
+| Cisco ThousandEyes | Official | `api.thousandeyes.com/mcp` (remote HTTP) | Observability |
+| Splunk | Official | Splunk instance `:8089/services/mcp` (remote HTTP) | Observability, Security |
+| Cisco Meraki | CiscoDevNet community | [CiscoDevNet/meraki-magic-mcp-community](https://github.com/CiscoDevNet/meraki-magic-mcp-community) | Observability, Configuration, Security |
+| Cisco Catalyst SD-WAN | CiscoDevNet community | [CiscoDevNet/catalyst-sdwan-mcp-community](https://github.com/CiscoDevNet/catalyst-sdwan-mcp-community) (docker stdio) | Configuration, Automation |
+| Cisco Catalyst Center | Community | [richbibby/catalyst-center-mcp](https://github.com/richbibby/catalyst-center-mcp) (stdio) | Observability, Configuration, Automation |
+| Cisco ISE | Community | [pamosima/network-mcp-docker-suite](https://github.com/pamosima/network-mcp-docker-suite) (upstream [automateyournetwork/ISE_MCP](https://github.com/automateyournetwork/ISE_MCP)) | Identity, Compliance |
+| ServiceNow | Community | [echelon-ai-labs/servicenow-mcp](https://github.com/echelon-ai-labs/servicenow-mcp) (stdio) | Automation, Observability |
+| NetBox | Official (NetBox Labs) | [netboxlabs/netbox-mcp-server](https://github.com/netboxlabs/netbox-mcp-server) (read-only) | Configuration, Compliance |
+| INFER | MIGA-original | `servers/infer_mcp` | Observability, Security, Compliance |
 
 ## Use Case Scenarios
 
@@ -150,7 +146,7 @@ A network engineer gets paged at 2 AM. Instead of logging into four different da
 
 > **Engineer:** `network status`
 
-MIGA fans out across Catalyst Center, Meraki, ThousandEyes, and XDR simultaneously, returning a single health card with scores, top issues, and active threats. ThousandEyes is flagging packet loss on a WAN path.
+MIGA fans out across Catalyst Center, Meraki, ThousandEyes, and Splunk simultaneously, returning a single health card with scores, top issues, and active alerts. ThousandEyes is flagging packet loss on a WAN path.
 
 > **Engineer:** `correlate events last 30 minutes`
 
@@ -168,25 +164,23 @@ A SOC analyst opens the Network Security WebEx space:
 
 > **Analyst:** `critical security events`
 
-XDR returns active threat detections, Meraki flags anomalous traffic, and Security Cloud Control shows a policy violation.
+Splunk returns active detections from the SIEM, and Meraki flags anomalous appliance traffic.
 
 > **Analyst:** `risk score`
 
-INFER calculates a composite **78/100** — the top contributor is an unpatched endpoint communicating with a known C2 domain.
+INFER calculates a composite **78/100** — the top contributor is an endpoint with repeated authentication failures correlated against a Splunk alert.
 
 > **Analyst:** `quarantine endpoint AA:BB:CC:DD:EE:01`
 
-An approval card fires to the security lead. One tap — ISE isolates the device. The entire **triage-to-containment loop** happened in a WebEx space without touching a single console.
+An approval card fires to the security lead. One tap — Cisco ISE isolates the device. The entire **triage-to-containment loop** happened in a WebEx space without touching a single console.
 
 ---
 
 ### 🔧 Change Management / Maintenance Windows
 
-Before a maintenance window, the change manager checks in:
-
 > **Change Manager:** `predict failures`
 
-INFER analyzes recent telemetry patterns and flags that three switches in Building C have incrementing CRC errors, suggesting a cascading failure risk. The team adjusts the maintenance plan.
+INFER analyzes recent telemetry patterns and flags that three switches in Building C have incrementing CRC errors, suggesting a cascading failure risk.
 
 > **Change Manager:** `compare network health before and after`
 
@@ -194,53 +188,11 @@ The bot pulls Catalyst Center health scores and ThousandEyes test baselines, sho
 
 ---
 
-### 📊 Executive / Management Reporting
-
-A director drops into the NOC WebEx space:
-
-> **Director:** `how's the network?`
-
-They get a clean health card: **94/100**, 3 active issues (all low severity), zero security incidents. No dashboards, no VPN, no credentials. They forward the card to their VP. Done.
-
----
-
 ### ✅ Compliance Auditing
-
-An auditor needs evidence for an upcoming review:
-
-> **Auditor:** `certificate expiry status`
-
-Security Cloud Control returns all certs expiring within 30 days, rendered as a sortable table card.
 
 > **Auditor:** `compliance posture`
 
-ISE returns endpoint posture stats, INFER calculates drift from baseline. The auditor has **exportable evidence** without requesting access to any platform.
-
----
-
-### 👥 Multi-Team Collaboration in Shared Spaces
-
-The bot lives in a shared "Network Operations" WebEx space. When INFER detects an anomaly, it **proactively posts an alert card**:
-
-> 🔴 **Anomaly detected:** 3x normal auth failure rate from Building D — correlates with ISE RADIUS timeout and Catalyst Center switch CPU spike.
-
-The network team, security team, and identity team all see it simultaneously. Someone taps **Investigate** on the card, and the bot threads the deep-dive results. Cross-functional triage happens in one place instead of three separate channels and a bridge call.
-
----
-
-### 🎓 Onboarding / Self-Service
-
-A new hire on the network team starts exploring:
-
-> **New Engineer:** `help`
-
-The bot returns an interactive card listing everything it can do across all 6 roles with example commands. No need to learn 6 different platform UIs on day one.
-
-> **New Engineer:** `list devices`
->
-> **New Engineer:** `meraki wireless health`
-
-Full inventory and real-time AP status, all through natural language. The learning curve for the entire Cisco stack just collapsed to a conversation.
+Cisco ISE returns endpoint posture stats, NetBox supplies source-of-truth inventory and change history, and INFER calculates drift from baseline. The auditor has **exportable evidence** without requesting access to any platform.
 
 ---
 
@@ -250,17 +202,11 @@ INFER detects a correlated branch outage across ThousandEyes, Meraki, and Cataly
 
 > **MIGA Bot:** 🔴 **Correlated incident detected:** WAN degradation at Site-A — 3 platforms affected, root cause: upstream circuit CKT-00412 packet loss.
 
-The bot auto-creates a ServiceNow P1 incident with the full RCA attached. ServiceNow's Predictive Intelligence assigns it to Network Operations with 91% confidence.
+The bot auto-creates a ServiceNow P1 incident with the full RCA attached.
 
 > **Engineer:** `status INC0078432`
 
-The bot pulls the live ticket: assigned to Jane Smith, Lumen NOC contacted, provider ticket LMN-98765 open.
-
-> **Engineer:** `any changes scheduled for core-switch-03?`
-
-ServiceNow returns two upcoming changes — an IOS-XE upgrade Saturday night and a Lumen bandwidth upgrade next week. The engineer confirms the outage isn't change-related.
-
-After remediation, the engineer types:
+The bot pulls the live ticket: assigned to Network Operations, provider ticket open.
 
 > **Engineer:** `resolve INC0078432 — Lumen fiber repair completed, circuit stable`
 
@@ -278,34 +224,23 @@ NetBox resolves it: **Core Switch 3** — Catalyst 9300-48P, Rack 14, Building C
 
 > **Engineer:** `what's the blast radius?`
 
-NetBox maps the relationships: 3 downstream access switches serving **240 users**, upstream WAN edge on Lumen circuit CKT-00412, supporting Branch Office VPN and VoIP services. The engineer now knows this is a high-impact event before a single user calls the help desk.
+NetBox maps the relationships: 3 downstream access switches serving **240 users**, upstream WAN edge on Lumen circuit CKT-00412. The engineer now knows this is a high-impact event before a single user calls the help desk.
 
-> **Engineer:** `trace the path from core-switch-03 to the WAN edge`
-
-NetBox returns the physical cable path and circuit information. The engineer sees the handoff interface and can pinpoint exactly where to look.
-
-During change planning, the team asks:
-
-> **Change Manager:** `what devices are in Rack 14?`
-
-NetBox returns the full rack elevation — power budget, available U-space, and every device with its role. The maintenance window plan now accounts for every dependency, not just the device being touched.
-
-
-
-
-
+---
 
 ## AGNTCY Integration
 
-MIGA takes full advantage of Cisco's [AGNTCY](https://agntcy.org)
-Internet of Agents framework (Linux Foundation) orchestrating Cisco platform
-AI/ML capabilities:
+MIGA uses Cisco's [AGNTCY](https://agntcy.org) Internet of Agents framework
+(Linux Foundation):
 
-- **OASF**: Each MCP server publishes a structured capability record
-- **Agent Directory**: Dynamic discovery (deploy a new server and the Gateway finds it)
-- **Identity**: Cryptographically verifiable server identities via Agent Badges
-- **SLIM** (v2): Quantum-safe inter-service messaging
-- **Observability** (v2): OpenTelemetry distributed tracing
+- **OASF**: Each registered server publishes a structured capability record
+  (`oasf/records/*.record.json`) built against the OASF schema. The gateway
+  publishes these to the AGNTCY Directory at startup.
+- **Agent Directory**: Dynamic discovery — register a new server in the registry,
+  add its OASF record, and the gateway finds and routes to it.
+- **Identity**: Cryptographically verifiable server identities via Agent Badges.
+- **SLIM** (v2): Quantum-safe inter-service messaging.
+- **Observability** (v2): OpenTelemetry distributed tracing.
 
 ## Deployment
 
@@ -318,18 +253,19 @@ docker compose up -d
 ```bash
 helm install miga ./helm/miga --namespace miga --create-namespace
 ```
+(The Helm chart deploys the gateway, WebEx bot, and INFER. External platform
+servers are provisioned out-of-band and referenced via the registry.)
 
 **CLI Tool:**
 ```bash
-python -m packages.cli.miga_cli deploy --env prod --platforms all
 python -m packages.cli.miga_cli status
-python -m packages.cli.miga_cli logs catalyst-center
 ```
 
 ## Contributing
 
-Stubs are designed for easy community contribution. See
-[docs/CONTRIBUTING.md](docs/CONTRIBUTING.md) for a step-by-step guide.
+To add a platform: add an entry to `config/server-registry.yaml`, author its OASF
+record under `oasf/records/`, and wire any env vars in `.env.example`. See
+[docs/CONTRIBUTING.md](docs/CONTRIBUTING.md).
 
 ## License
 
