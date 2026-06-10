@@ -46,6 +46,26 @@ The client is reconciled to these — they are **confirmed**, not guessed:
 3. **`server_address` wiring.** The gateway sets `AGNTCY_DIRECTORY_ADDR` (compose);
    `DirectoryClient` passes it explicitly to `Config(server_address=...)`.
 
+**Pinned in compose (confirmed from upstream agntcy/dir source):**
+- OASF validation: `DIRECTORY_SERVER_OASF_API_VALIDATION_SCHEMA_URL=https://schema.oasf.outshift.com`
+  (var name from `install/docker/apiserver.env`). It MUST point at the same service the
+  records are conformed to (1.0.0); a mismatch makes the apiserver reject pushes — which
+  Step 0 catches up front.
+- Healthcheck: `grpc-health-probe -addr=127.0.0.1:8888` (matches the upstream quickstart;
+  the probe binary `v0.4.48` is COPY'd into the image per upstream `server/Dockerfile`).
+
+## Step 0 — preflight (run first; require GREEN before Step 1)
+This catches the failure modes the gateway's standalone fallback would otherwise mask
+— most importantly a record **rejected** by the apiserver (OASF schema/version
+mismatch), surfaced here instead of as a silent "standalone" later.
+```bash
+bash scripts/preflight_directory.sh
+# checks: the 4 pinned images exist (docker manifest inspect); GET /api/version;
+# POSTs every oasf/records/*.record.json to /api/validate/object/record and FAILS
+# loudly on any error_count > 0. Exits non-zero on any failure.
+```
+Do not proceed unless it prints **PREFLIGHT PASS**.
+
 ## Step 1 — bring up the directory stack + MIGA
 ```bash
 cp .env.example .env     # if not present
@@ -62,7 +82,15 @@ docker compose restart gateway
 docker compose logs gateway | grep -iE "Published .* to AGNTCY Directory \(CID:|standalone"
 ```
 Expect "Published <name> to AGNTCY Directory (CID: <cid>)" for the registered servers
-— NOT "standalone". Capture one CID:
+— NOT "standalone". If you see "standalone" or no "Published" line, the fallback is now
+**legible** — grep the classified WARNING to tell *unreachable* from *rejected*:
+```bash
+docker compose logs gateway | grep -iE "directory (push|pull|delete) failed"
+#   ... (unreachable)  -> directory is down / wrong AGNTCY_DIRECTORY_ADDR
+#   ... (rejected)     -> apiserver refused the record (OASF schema/version mismatch);
+#                         re-run Step 0 preflight to see which record + why
+```
+Capture one CID:
 ```bash
 CID=$(docker compose logs gateway | grep -oE 'CID: [^)]+' | head -1 | awk '{print $2}')
 echo "CID=$CID"

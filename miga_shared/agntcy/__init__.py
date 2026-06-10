@@ -174,12 +174,33 @@ class DirectoryClient:
         return core_v1.Record(data=s)
 
     @staticmethod
-    def _is_unreachable(exc: Exception) -> bool:
-        low = str(exc).lower()
-        return any(
-            k in low
+    def _grpc_code(exc: Exception) -> str | None:
+        """Best-effort gRPC status-code name (e.g. UNAVAILABLE, INVALID_ARGUMENT) from a
+        grpc.RpcError, without importing grpc."""
+        code = getattr(exc, "code", None)
+        if callable(code):
+            with contextlib.suppress(Exception):
+                c = code()
+                return getattr(c, "name", str(c))
+        return None
+
+    @classmethod
+    def _classify(cls, exc: Exception) -> str:
+        """Classify a directory error so the operator can tell *unreachable* (directory
+        down) from *rejected* (record refused by the apiserver, e.g. schema mismatch)
+        from a generic error. Returns 'unreachable' | 'rejected' | 'error'."""
+        code = cls._grpc_code(exc)
+        hay = (str(exc) + " " + (code or "")).lower()
+        if code == "UNAVAILABLE" or any(
+            k in hay
             for k in ("unavailable", "connection", "refused", "deadline", "dial", "no such host")
-        )
+        ):
+            return "unreachable"
+        if code in ("INVALID_ARGUMENT", "FAILED_PRECONDITION", "OUT_OF_RANGE") or any(
+            k in hay for k in ("invalid", "valid", "reject", "schema")
+        ):
+            return "rejected"
+        return "error"
 
     def _push_sync(self, client: Any, record_dict: dict[str, Any]) -> list[Any]:
         return client.push([self._to_record(record_dict)])
@@ -205,17 +226,17 @@ class DirectoryClient:
             refs = await asyncio.wait_for(
                 asyncio.to_thread(self._push_sync, client, record), timeout=self.timeout
             )
-        except TimeoutError:
-            logger.warning("AGNTCY Directory push timed out — standalone")
+        except TimeoutError as exc:
+            logger.warning("directory push failed for %s: %r (timeout/unreachable)", name, exc)
             return "standalone"
         except Exception as exc:  # noqa: BLE001 - best-effort
-            if self._is_unreachable(exc):
-                logger.warning("AGNTCY Directory unreachable at %s — standalone", self.addr)
-                return "standalone"
-            logger.error("Directory push failed for %s: %s", name, exc)
-            return "error"
+            kind = self._classify(exc)
+            logger.warning("directory push failed for %s: %r (%s)", name, exc, kind)
+            # unreachable -> standalone (directory treated as down); rejected/error ->
+            # "error" so a refused record is NOT masked as a missing directory.
+            return "standalone" if kind == "unreachable" else "error"
         if not refs:
-            logger.error("Directory push for %s returned no RecordRef", name)
+            logger.warning("directory push for %s returned no RecordRef (rejected?)", name)
             return "error"
         cid = refs[0].cid
         logger.info("Published %s to AGNTCY Directory (CID: %s)", name, cid)
@@ -238,7 +259,10 @@ class DirectoryClient:
 
         try:
             return await asyncio.wait_for(asyncio.to_thread(_pull_sync), timeout=self.timeout)
-        except Exception:  # noqa: BLE001 - best-effort
+        except Exception as exc:  # noqa: BLE001 - best-effort
+            logger.warning(
+                "directory pull failed for cid %s: %r (%s)", cid, exc, self._classify(exc)
+            )
             return None
 
     async def discover(
@@ -267,7 +291,10 @@ class DirectoryClient:
 
         try:
             return await asyncio.wait_for(asyncio.to_thread(_delete_sync), timeout=self.timeout)
-        except Exception:  # noqa: BLE001 - best-effort
+        except Exception as exc:  # noqa: BLE001 - best-effort
+            logger.warning(
+                "directory delete failed for cid %s: %r (%s)", cid, exc, self._classify(exc)
+            )
             return False
 
     async def health(self) -> bool:

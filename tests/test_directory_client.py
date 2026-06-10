@@ -173,6 +173,62 @@ class TestHealthReady:
         assert not hasattr(DirectoryClient, "_parse_cid")
 
 
+class TestFallbackLogging:
+    @pytest.mark.asyncio
+    async def test_unreachable_push_logs_warning_with_exc_and_kind(self, monkeypatch, caplog):
+        import logging
+
+        c = _ready_client(
+            monkeypatch, _FakeClient(push_exc=RuntimeError("rpc error: connection refused"))
+        )
+        with caplog.at_level(logging.WARNING, logger="miga.agntcy"):
+            res = await c.register_record(RECORD)
+        assert res == "standalone"
+        msgs = [r.getMessage() for r in caplog.records]
+        assert any(
+            "directory push failed" in m and "connection refused" in m and "unreachable" in m
+            for m in msgs
+        ), msgs
+
+    @pytest.mark.asyncio
+    async def test_rejected_push_logs_rejected_and_returns_error(self, monkeypatch, caplog):
+        import logging
+
+        class _RejectedError(Exception):
+            def code(self):
+                return SimpleNamespace(name="INVALID_ARGUMENT")
+
+        fake = _FakeClient(push_exc=_RejectedError("record validation failed"))
+        c = _ready_client(monkeypatch, fake)
+        with caplog.at_level(logging.WARNING, logger="miga.agntcy"):
+            res = await c.register_record(RECORD)
+        # A REJECTED record must NOT be masked as a down directory:
+        assert res == "error"
+        assert any(
+            "directory push failed" in r.getMessage() and "rejected" in r.getMessage()
+            for r in caplog.records
+        )
+
+    @pytest.mark.asyncio
+    async def test_pull_failure_logs_warning(self, monkeypatch, caplog):
+        import logging
+
+        monkeypatch.setattr(agntcy, "_SDK_AVAILABLE", True)
+        c = DirectoryClient()
+
+        class _Boom:
+            def pull(self, refs):
+                raise RuntimeError("connection refused")
+
+        monkeypatch.setattr(c, "_sdk", lambda: _Boom())
+        monkeypatch.setattr(
+            agntcy, "core_v1", SimpleNamespace(RecordRef=lambda cid: SimpleNamespace(cid=cid))
+        )
+        with caplog.at_level(logging.WARNING, logger="miga.agntcy"):
+            assert await c.pull("baguqeera0001") is None
+        assert any("directory pull failed" in r.getMessage() for r in caplog.records)
+
+
 # -- live integration (opt-in only) ------------------------------------------
 
 

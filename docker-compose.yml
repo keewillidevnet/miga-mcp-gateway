@@ -80,8 +80,11 @@ services:
         condition: service_started
     environment:
       - DIRECTORY_SERVER_LISTEN_ADDRESS=0.0.0.0:8888
-      # Validate records against the OASF schema server. Records are pinned to
-      # OASF 1.0.0; the schema server serves that version.
+      # OASF record validation. Var name confirmed from upstream agntcy/dir
+      # install/docker/apiserver.env. MUST point at the SAME service the records are
+      # conformed to — schema.oasf.outshift.com reports schema_version 1.0.0, and the 9
+      # records under oasf/records/ are pinned to 1.0.0. A mismatch here would make the
+      # apiserver REJECT pushes (surfaced by scripts/preflight_directory.sh, not masked).
       - DIRECTORY_SERVER_OASF_API_VALIDATION_SCHEMA_URL=https://schema.oasf.outshift.com
       - DIRECTORY_SERVER_STORE_PROVIDER=oci
       - DIRECTORY_SERVER_STORE_OCI_REGISTRY_ADDRESS=zot:5000
@@ -98,8 +101,9 @@ services:
     ports:
       - "8888:8888"
     healthcheck:
-      # dir-apiserver ships grpc-health-probe (NOT an HTTP /health endpoint).
-      test: ["CMD", "grpc-health-probe", "-addr=127.0.0.1:8888"]
+      # Matches the upstream agntcy/dir quickstart. grpc-health-probe (v0.4.48) is
+      # COPY'd into the image per upstream server/Dockerfile (NOT an HTTP /health).
+      test: ["CMD-SHELL", "grpc-health-probe -addr=127.0.0.1:8888 || exit 1"]
       interval: 15s
       timeout: 5s
       retries: 10
