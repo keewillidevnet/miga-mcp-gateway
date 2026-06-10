@@ -1,11 +1,33 @@
 # VERIFY_DIRECTORY.md — live verification runbook (agntcy-dir Python SDK)
 
-> Status: the integration on branch `feat/agntcy-directory-real` was **written but
-> NOT verified**. The build sandbox has no container-registry egress (ghcr.io pulls
-> return `denied`) and likely no access to the buf.build Python index, so the
-> `agntcy-dir` SDK could not be installed and the directory could not be brought up.
-> Run this on a **networked Docker host**. Until every success criterion passes,
-> **leave the README AGNTCY directory/discovery claims at "planned."**
+> ## ✅ RESULT: PASSED (verified live on a networked Docker host)
+> The publish path is verified. Evidence:
+> - The gateway loaded **9 specs** and published **9/9 OASF records** to a real
+>   `dir-apiserver` (agntcy-dir **1.3.0** SDK), each returning a CID. Example —
+>   ThousandEyes CID `baeareib76bkxrndesmq6qwoovymkay3zfdljpxbfqunhuvab4zdv2cu4vm`
+>   (matches a manual SDK push of the same record → deterministic, content-addressed).
+> - Records **pull back by CID** at `schema_version` **1.0.0**.
+> - Image tags resolved: `dir-apiserver:v1.3.0`, `dir-reconciler:v1.3.0`,
+>   `zot:v2.1.16`, and `docker.io/bitnamilegacy/postgresql:16` (bitnami catalog
+>   relocation — the digest-pinned `bitnami/postgresql` ref no longer resolves).
+>
+> The runbook below is retained for re-runs and regression checks. **Verified items**
+> (directory publication + pull round-trip) are reflected as *implemented* in the
+> README; **identity badges, SLIM, OpenTelemetry, and directory-search-based routing
+> discovery remain "planned."**
+
+## Cosmetic fixes applied AFTER the live run (author-only — re-run to confirm)
+These were authored + unit-tested in the build sandbox but **not** exercised on the live
+stack; re-run the relevant step to confirm:
+- **apiserver healthcheck** → EXEC form `["CMD","grpc-health-probe","-addr=127.0.0.1:8888"]`
+  (the dir-apiserver image is distroless — no `/bin/sh`, so the shell-form check failed
+  with "/bin/sh not found"). Re-check: `docker inspect --format '{{.State.Health.Status}}'`.
+- **gateway healthcheck** → added a plain-HTTP `/health` route to the gateway (FastMCP
+  serves MCP at `/mcp`, so the `curl /health` probe was 404ing). Re-check: gateway health
+  goes `healthy`; `curl -f localhost:8000/health` returns `{"status":"ok"}`.
+- **boot-time logging** → `miga.*` loggers are (re)configured at lifespan start so the
+  "Published 9/9" INFO line survives uvicorn's logging reconfiguration. Re-check:
+  `docker compose logs gateway | grep "Published .* OASF records"`.
 
 ## What this verifies
 That MIGA, using the official **`agntcy-dir` Python SDK** (`agntcy.dir_sdk`) natively

@@ -101,9 +101,11 @@ services:
     ports:
       - "8888:8888"
     healthcheck:
-      # Matches the upstream agntcy/dir quickstart. grpc-health-probe (v0.4.48) is
-      # COPY'd into the image per upstream server/Dockerfile (NOT an HTTP /health).
-      test: ["CMD-SHELL", "grpc-health-probe -addr=127.0.0.1:8888 || exit 1"]
+      # EXEC form (not CMD-SHELL): the dir-apiserver image is distroless — there is no
+      # /bin/sh, so a shell-form healthcheck fails with "/bin/sh not found" (seen live).
+      # grpc-health-probe (v0.4.48) is COPY'd to /bin per upstream server/Dockerfile and
+      # is on PATH; the binary name + -addr flag match the upstream quickstart.
+      test: ["CMD", "grpc-health-probe", "-addr=127.0.0.1:8888"]
       interval: 15s
       timeout: 5s
       retries: 10

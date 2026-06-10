@@ -52,7 +52,7 @@ and risk scoring across platforms.
 ┌────────────────────────────────────────────────────────────────────────────┐
 │                        Gateway MCP Server (Python)                         │
 │           Registry-driven routing  (config/server-registry.yaml)           │
-│              OASF records · AGNTCY Directory publish: planned              │
+│          OASF records · AGNTCY Directory publish: live (verified)          │
 │               6 Roles: Observability | Security | Automation               │
 │                   Configuration | Compliance | Identity                    │
 │        MCP CLIENT transports: HTTP/SSE URLs + stdio (docker run -i)        │
@@ -72,7 +72,8 @@ and risk scoring across platforms.
 └────────────────┘  └────────────────┘  └────────────────┘  └────────────────┘
 
 All 8 servers + INFER have authored OASF records (validated against OASF 1.0.0).
-Discovery today is registry-driven; live AGNTCY Directory publication is planned.
+Routing is registry-driven; OASF records are published to a real AGNTCY Directory
+(verified live: 9/9, CIDs, pull-by-CID at schema_version 1.0.0).
 INFER consumes their normalized output:
 
 ┌────────────────────────────────────────────────────────────────────────────┐
@@ -245,19 +246,21 @@ NetBox maps the relationships: 3 downstream access switches serving **240 users*
 MIGA is built to **align with** Cisco's [AGNTCY](https://agntcy.org) Internet of
 Agents framework (Linux Foundation). Honest status of each piece:
 
-- **OASF — implemented (records) / planned (live publication).** Each registered
-  server has an authored OASF capability record under `oasf/records/*.record.json`,
-  and all nine validate against the canonical OASF **1.0.0** schema server with
-  **0 errors / 0 warnings**. The gateway contains best-effort code to publish these
-  to an AGNTCY Directory at startup, but they are **not currently published to a live
-  directory** (see Agent Directory below and MIGRATION.md).
-- **Discovery — implemented (registry) / planned (Agent Directory).** Routing is
-  driven entirely by `config/server-registry.yaml`: the gateway loads it at startup
-  and reloads it periodically, so adding a server (a registry entry + an OASF record)
-  is picked up with no code changes. Discovery via the AGNTCY **Agent Directory**
-  product is **not yet wired** — MIGA's `DirectoryClient` speaks a simplified REST
-  `/v1/records` API that does not match the real directory (gRPC `dir-apiserver` +
-  OCI registry + postgres); `register` is best-effort and falls back to standalone.
+- **OASF — implemented (verified live).** Each registered server has an authored OASF
+  capability record under `oasf/records/*.record.json` (all nine validate against the
+  canonical OASF **1.0.0** schema server with **0 errors / 0 warnings**). At startup the
+  gateway publishes all **9/9** records to a real AGNTCY Directory (`dir-apiserver`, via
+  the `agntcy-dir` 1.3.0 SDK), each returning a content-addressed **CID**, and records
+  **pull back by CID** at `schema_version` 1.0.0 — confirmed on a networked Docker host
+  (see `VERIFY_DIRECTORY.md`).
+- **Directory publication — implemented (verified live); discovery-based routing — planned.**
+  The gateway publishes OASF records to the real AGNTCY **Agent Directory** via the
+  `agntcy-dir` Python SDK (native gRPC; no `dirctl` at runtime); publication is
+  best-effort and falls back to standalone if the directory is unreachable. **Routing is
+  driven entirely by `config/server-registry.yaml`** (loaded at startup + periodically
+  reloaded), so adding a server is picked up with no code change. Using the directory's
+  *search/discovery* to drive routing is **planned** — routing does not yet depend on
+  the directory.
 - **Identity (Agent Badges) — planned.** A scaffolding `IdentityBadge` type exists,
   but it performs no cryptographic signing or verification yet (`verify()` only
   checks for field presence). Treat verifiable agent identity as planned, not built.
@@ -265,13 +268,12 @@ Agents framework (Linux Foundation). Honest status of each piece:
   quantum-safe AGNTCY SLIM is a future item.
 - **Observability — planned (v2).** No OpenTelemetry tracing is wired today.
 
-> **In progress:** wiring to the *real* AGNTCY Directory — the `dir-apiserver`
-> gRPC service + `zot` OCI registry + `postgres` + `reconciler`, driven through the
-> official **`agntcy-dir` Python SDK** (`agntcy.dir_sdk`) running natively in the
-> gateway (no `dirctl` binary required at runtime) — is drafted on branch
-> `feat/agntcy-directory-real` and is **pending live verification** on a networked
-> Docker host (see `VERIFY_DIRECTORY.md`). The directory/discovery items above remain
-> **planned** until that verification passes.
+> **Verified live:** on a networked Docker host the gateway loaded 9 specs and published
+> **9/9** OASF capability records to a real AGNTCY Directory (`dir-apiserver` + `zot` +
+> `postgres` + `reconciler`) via the `agntcy-dir` 1.3.0 SDK, each returning a CID, with
+> a pull-by-CID round-trip at `schema_version` 1.0.0 (see `VERIFY_DIRECTORY.md`). Still
+> **planned**: cryptographic Agent Badges, SLIM (v2), OpenTelemetry (v2), and
+> directory-search-based routing discovery.
 
 **What is real and load-bearing:** a registry-driven gateway fronting 8 real external
 MCP servers plus INFER, with a validated OASF 1.0.0 capability record per server.
