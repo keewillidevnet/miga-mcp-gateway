@@ -1,8 +1,11 @@
 # MIGA Refactor — Validation Report (post-cleanup)
 
-**Verdict: GO for production** — pending two environment-only pre-publish gates that
-could not be exercised in the audit sandbox (live OASF endpoint validation C9, and
-`docker compose config` D10). All functional checklist items A–I pass.
+**Verdict: GO — pending two environment-only gates.** All functional checklist items
+A–I pass and the CLI `shell=True` sharp edge is now closed (argv form). The two
+remaining gates could not be executed in this sandbox and must be run on a networked /
+Docker-enabled box before publish: **Gate 1** live OASF `validate_object` (C9) and
+**Gate 2** `docker compose config` (D10). Reproducible commands are in the
+"Post-cleanup: argv fix + environment gates" section below.
 
 History:
 - Audited at `main` HEAD `8798d7a` (PR #1 + PR #2 merged). Two A2 defects were found.
@@ -136,3 +139,87 @@ local_process (compose infer-mcp): infer        -> logs: docker compose logs inf
 ruff check .          -> All checks passed!
 ruff format --check . -> all formatted
 ```
+
+
+---
+
+## Post-cleanup: argv fix + environment gates
+
+### Argv fix — close the CLI `shell=True` sharp edge (security S2 follow-up)
+- **File:** `packages/cli/miga_cli.py` (+ `tests/test_cli.py`). No other files touched.
+- **What changed:** every `subprocess` call in the CLI was converted from an
+  interpolated shell string (`shell=True`) to an **argv list with `shell=False`**.
+  `_run(cmd: str)` → `_run(args: list[str])`; `_docker_compose(subcmd: str, services)`
+  → `_docker_compose(args: list[str])`. All call sites updated: `deploy` (cp / build /
+  up / helm), `status` (`docker compose ps`), **`logs`** (the registry-derived
+  `compose_service` is now passed as a discrete argv element, never interpolated),
+  `add-platform` (`up -d <svc>`), `stop` (`down`). `_run` catches `FileNotFoundError`
+  and returns rc=127 to preserve the prior non-crashing behavior when a binary is
+  absent. **No `shell=True` remains** (grep-verified). CLI behavior, flags, and output
+  are unchanged.
+- **Conversions left as-is:** none — every `shell=True` was eliminated.
+- **Tests:** `tests/test_cli.py` added — asserts the `logs meraki` invocation is an
+  argv list with `shell` not enabled and `meraki-mcp` as a discrete element; that a
+  remote_managed server (`thousandeyes`) makes no subprocess call; and that
+  `shell=True` is absent from the module.
+- **Results:** `pytest` → **122 passed, 4 xfailed**; `ruff check .` → clean;
+  `ruff format --check .` → clean.
+
+### Gate 1 — Live OASF `validate_object` of the 9 records (C9): **NOT-RUN (no outbound network)**
+- **Why NOT-RUN:** this sandbox has no outbound POST egress (`curl -X POST … ` →
+  HTTP `000`; GET web-fetch of `…/api/version` returns no content). Not faked.
+- **Authoritative endpoint** (from the OASF server source, `agntcy/oasf` router
+  `server/lib/schema_web/router.ex`):
+  - Validate a record: `POST /api/validate/object/record` — body is the record JSON
+    (the server nests it under `_json` automatically). Optional
+    `?warn_on_missing_recommended=true`.
+  - Live version: `GET /api/version`.
+- **Version delta:** records are pinned to **OASF schema v1.0.4** (latest stable
+  release tag at the time; repo `main` is `1.1.0-dev`). The **live** server version
+  could not be read here — confirm with `GET /api/version`. If it is **not** 1.0.4, do
+  NOT edit the records blindly; re-validate and check whether any of these
+  skill/domain ids shifted between versions (network taxonomy is stable across recent
+  releases, but verify): skills `performance_monitoring(1105)`,
+  `anomaly_detection(1104)`, `monitoring_alerting(1205)`, `threat_detection(801)`,
+  `retrieval_of_information(601)`, `workflow_automation(1402)`,
+  `api_schema_understanding(1401)`, `audit_trail_summarization(1303)`,
+  `risk_classification(1304)`, `tool_use_planning(1403)`, `fact_extraction(10301)`,
+  `document_or_database_question_answering(602)`,
+  `information_retrieval_synthesis_search(10306)`, `analytical_reasoning(107)`,
+  `hypothesis_generation(1504)`; domains `network_operations(10301)`,
+  `network_management(10302)`, `network_architecture(10304)`,
+  `network_security(10305)`, `wireless_communication(10802)`, `cybersecurity(10701)`,
+  `identity_management(10705)`, `incident_management(10706)`,
+  `workflow_automation(11002)`.
+- **Reproducible commands (run from the repo root on a networked box):**
+  ```bash
+  # 1) Confirm the live schema version vs the pinned 1.0.4
+  curl -s https://schema.oasf.outshift.com/api/version ; echo
+
+  # 2) Validate all 9 records against the live endpoint
+  for f in oasf/records/*.record.json; do
+    echo "== $f =="
+    curl -s -X POST \
+      "https://schema.oasf.outshift.com/api/validate/object/record?warn_on_missing_recommended=true" \
+      -H "Content-Type: application/json" \
+      --data-binary @"$f"
+    echo
+  done
+  ```
+  A passing record returns an empty/`{}`-style result with no `errors`; failures list
+  per-field messages.
+
+### Gate 2 — `docker compose config` (D10): **NOT-RUN (docker not installed)**
+- **Why NOT-RUN:** the `docker` CLI is not present in this sandbox. Not faked.
+- **Reproducible commands:**
+  ```bash
+  docker compose config            # full rendered config
+  docker compose config --quiet    # clean exit-code check (0 = valid)
+  ```
+- **YAML-level inventory confirmed without Docker** (parsed `docker-compose.yml`):
+  - Services: `agntcy-directory, gateway, infer-mcp, ise-mcp, meraki-mcp, netbox-mcp, redis, webex-bot`.
+  - Compose-deployed servers present (meraki, ise, netbox, infer): **PASS**.
+  - ThousandEyes / Splunk are **not** services (URL-referenced only): **PASS**.
+  - No dropped-platform services remain: **PASS**.
+  The remaining check `docker compose config --quiet` (env interpolation + schema)
+  must still be run in a Docker environment to fully close D10.
