@@ -15,39 +15,36 @@ back (positive success), and that when the directory is **down** the gateway sti
 serves routing from `config/server-registry.yaml` (standalone fallback). No `dirctl`
 binary is required at runtime (the SDK needs it only for signing, which MIGA omits).
 
-## ⚠️ Assumptions to confirm first (could not be checked offline)
-1. **SDK install + version.** `requirements.txt`/`pyproject.toml` pin `agntcy-dir==1.0.0`
-   as a **placeholder**. Install and pin the real version:
+## Confirmed surface (agntcy-dir==1.3.0, via live `dir(Client)` + `inspect.signature`)
+The client is reconciled to these — they are **confirmed**, not guessed:
+- Import: `from agntcy.dir_sdk.client import Client, Config`; `from agntcy.dir_sdk.models import core_v1`.
+- Construct: `Client(Config(server_address=<AGNTCY_DIRECTORY_ADDR>))`.
+- `push(records: list[Record], metadata=None) -> list[RecordRef]` — **list in, list out**.
+- `pull(refs: list[RecordRef]) -> list[Record]`; `delete(refs: list[RecordRef]) -> None`.
+- `RecordRef` has one field `.cid`. `Record` has one field `.data`
+  (`google.protobuf.Struct`) — build via `s = Struct(); ParseDict(oasf, s); core_v1.Record(data=s)`.
+- `search_records(SearchRecordsRequest)` — request proto; discovery is not on MIGA's
+  routing path, so it is intentionally left best-effort (`[]`).
+
+## Still to confirm on a networked host
+1. **Install** `agntcy-dir==1.3.0` from the buf.build index (pin is set, not a placeholder):
    ```bash
-   uv add agntcy-dir --index https://buf.build/gen/python
-   # or: pip install agntcy-dir --extra-index-url https://buf.build/gen/python
-   python -c "import agntcy.dir_sdk, importlib.metadata as m; print(m.version('agntcy-dir'))"
+   uv add agntcy-dir==1.3.0 --index https://buf.build/gen/python
+   # or: pip install "agntcy-dir==1.3.0" --extra-index-url https://buf.build/gen/python
+   python -c "import importlib.metadata as m; print(m.version('agntcy-dir'))"   # -> 1.3.0
    ```
-   Update the pin in `requirements.txt` and `pyproject.toml` to the printed version.
-2. **SDK method names / casing.** `DirectoryClient` calls `push`/`Push`, `pull`/`Pull`,
-   `delete`/`Delete` (resolved defensively) and reads the **structured** `RecordRef.cid`.
-   Confirm the real Python method names and the CID attribute:
+2. **Image tags** exist on ghcr (pinned to dir v1.3.0; zot + postgres lifted from the
+   agntcy/dir quickstart):
    ```bash
-   python - <<'PY'
-   from agntcy.dir_sdk.client import Client, Config
-   print([m for m in dir(Client) if not m.startswith('_')])
-   PY
-   ```
-3. **Record construction.** `_to_record()` builds `core_v1.Record` from the OASF JSON
-   via `google.protobuf.json_format.ParseDict`. Confirm the model module path
-   (`agntcy.dir_sdk.models.core_v1`) and that `ParseDict` accepts the OASF 1.0.0 fields.
-4. **Image tags.** Compose pins `ghcr.io/agntcy/dir-apiserver:1.16.0`,
-   `ghcr.io/agntcy/dir-reconciler:1.16.0`, `ghcr.io/project-zot/zot:v2.1.16`,
-   `docker.io/bitnami/postgresql:16`. Confirm they exist:
-   ```bash
-   docker pull ghcr.io/agntcy/dir-apiserver:1.16.0
-   docker pull ghcr.io/agntcy/dir-reconciler:1.16.0
+   docker pull ghcr.io/agntcy/dir-apiserver:v1.3.0
+   docker pull ghcr.io/agntcy/dir-reconciler:v1.3.0
    docker pull ghcr.io/project-zot/zot:v2.1.16
-   docker pull docker.io/bitnami/postgresql:16
+   docker pull docker.io/bitnami/postgresql:latest@sha256:7651d7f24aad83fe68a222f7f20eded10d325c96ebee285ca5bf8162eddcba64
    ```
-5. **`server_address` wiring.** The gateway sets `AGNTCY_DIRECTORY_ADDR` (compose);
-   `DirectoryClient` passes it to `Config(server_address=...)` and also exports
-   `DIRECTORY_CLIENT_SERVER_ADDRESS`. Confirm the SDK honors one of these.
+   The `dir-reconciler` image name is confirmed from the dir charts; the exact `:v1.3.0`
+   tag for apiserver/reconciler should be confirmed against the ghcr package list.
+3. **`server_address` wiring.** The gateway sets `AGNTCY_DIRECTORY_ADDR` (compose);
+   `DirectoryClient` passes it explicitly to `Config(server_address=...)`.
 
 ## Step 1 — bring up the directory stack + MIGA
 ```bash
@@ -103,7 +100,7 @@ docker compose logs gateway | grep -iE "standalone|Routing table loaded"
 ```
 
 ## Success criteria (all must hold)
-- [ ] `agntcy-dir` installs from the buf.build index; the pin is updated to the real version.
+- [ ] `agntcy-dir==1.3.0` installs from the buf.build index.
 - [ ] All four directory services come up; `agntcy-directory` health = `healthy`.
 - [ ] Gateway logs show "Published … (CID: …)" — real publication via the SDK, not `standalone`.
 - [ ] The published record is retrievable by CID (SDK `pull` or `dirctl pull`) and appears in search.

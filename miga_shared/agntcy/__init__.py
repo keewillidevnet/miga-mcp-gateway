@@ -13,6 +13,22 @@ from miga_shared.models import MIGARole, PlatformCapability, PlatformType
 
 logger = logging.getLogger("miga.agntcy")
 
+# ---------------------------------------------------------------------------
+# Optional agntcy-dir SDK (real surface confirmed via live introspection on
+# agntcy-dir==1.3.0). The import is guarded so MIGA still runs when the SDK is
+# absent — that absence IS the standalone path (and how CI / the build sandbox run).
+# ---------------------------------------------------------------------------
+try:
+    from agntcy.dir_sdk.client import Client, Config
+    from agntcy.dir_sdk.models import core_v1
+    from google.protobuf.json_format import MessageToDict, ParseDict
+    from google.protobuf.struct_pb2 import Struct
+
+    _SDK_AVAILABLE = True
+except ImportError:
+    Client = Config = core_v1 = Struct = ParseDict = MessageToDict = None  # type: ignore[assignment]
+    _SDK_AVAILABLE = False
+
 
 # ---------------------------------------------------------------------------
 # OASF Record
@@ -104,54 +120,44 @@ class OASFRecord:
 
 class DirectoryClient:
     """Client for the real AGNTCY Directory (``dir-apiserver``) via the official
-    **Python SDK** ``agntcy-dir`` (``agntcy.dir_sdk.client``).
+    **agntcy-dir Python SDK** (``agntcy.dir_sdk``), reconciled to the **1.3.0** surface
+    confirmed by live introspection.
 
-    The SDK is a native gRPC client (install: ``uv add agntcy-dir --index
-    https://buf.build/gen/python``); it does **not** require the ``dirctl`` binary at
-    runtime — per the SDK docs, ``dirctl`` is only needed for *signing*, which MIGA
-    does not use (Agent Badges are "planned"). This replaces the earlier
-    dirctl-subprocess client; the false "dir is Go-only" premise has been corrected.
+    Confirmed SDK surface (1.3.0):
+      * ``Client(Config(server_address=addr))``
+      * ``push(records: list[Record], metadata=None) -> list[RecordRef]`` (LIST in/out)
+      * ``pull(refs: list[RecordRef], metadata=None) -> list[Record]``
+      * ``delete(refs: list[RecordRef], metadata=None) -> None``
+      * ``search_records(req: SearchRecordsRequest, ...) -> list[...]`` (takes a request proto)
+      * ``RecordRef`` has one field ``.cid``; ``Record`` has one field ``.data``
+        (a ``google.protobuf.Struct``) — build via ``core_v1.Record(data=Struct(...))``.
 
-    Mapping (confirmed from the dir client source — Go names; the Python SDK mirrors
-    these and the exact Python casing is flagged for verification in
-    VERIFY_DIRECTORY.md):
-      * ``Push(record) -> RecordRef`` (structured, carries ``.cid``) — publish.
-      * ``Pull(ref) -> Record`` — fetch by ref/CID.
-      * ``SearchRecords`` / ``SearchCIDs`` — discovery.
-      * ``Delete(ref)`` — remove.
+    The SDK runs natively in the gateway; ``dirctl`` is NOT required at runtime (the SDK
+    needs it only for signing, which MIGA does not use).
 
-    **Best-effort by design.** If the SDK is not installed or the directory is
-    unreachable, methods log and return ``"standalone"``/``"error"`` and the gateway
-    keeps routing from ``config/server-registry.yaml``. Routing never depends on the
-    directory. NOT verified against a live directory in this environment (no buf.build
-    egress / no live stack) — treat as drafted-pending-verification.
+    **Best-effort by design.** If the SDK is absent or the directory is unreachable,
+    every op logs and returns ``"standalone"``/``"error"`` (or ``None``/``False``/``[]``)
+    and the gateway keeps routing from ``config/server-registry.yaml``. Routing never
+    depends on the directory. The 1.3.0 surface is confirmed by introspection but the
+    live roundtrip is still pending (see VERIFY_DIRECTORY.md).
     """
 
     def __init__(self, addr: str | None = None, *, timeout: float = 30.0):
         # gRPC host:port of dir-apiserver (NOT an http URL).
         self.addr = addr or os.getenv("AGNTCY_DIRECTORY_ADDR", "agntcy-directory:8888")
         self.timeout = timeout
-        self._client: Any = None  # lazily-constructed SDK Client
+        self._client: Any = None
 
     # -- SDK plumbing ---------------------------------------------------------
 
     def _sdk(self) -> Any:
-        """Lazily construct the agntcy-dir SDK ``Client``. Returns None (best-effort)
-        if the SDK isn't installed or the client can't be constructed — the gateway
-        then runs standalone. The SDK import is deferred so this module imports fine
-        without ``agntcy-dir`` present (e.g. in CI/sandbox)."""
+        """Construct the SDK ``Client`` once from MIGA's ``AGNTCY_DIRECTORY_ADDR``
+        (passed explicitly to ``Config``). Returns None (best-effort) if the SDK is
+        absent or the client can't be built."""
         if self._client is not None:
             return self._client
-        try:
-            from agntcy.dir_sdk.client import Client, Config
-        except ImportError:
-            logger.warning(
-                "agntcy-dir SDK not installed — AGNTCY Directory disabled (standalone). "
-                "Install: uv add agntcy-dir --index https://buf.build/gen/python"
-            )
+        if not _SDK_AVAILABLE:
             return None
-        # The SDK also reads DIRECTORY_CLIENT_SERVER_ADDRESS; set it for consistency.
-        os.environ.setdefault("DIRECTORY_CLIENT_SERVER_ADDRESS", self.addr)
         try:
             self._client = Client(Config(server_address=self.addr))
         except Exception as exc:  # noqa: BLE001 - best-effort init
@@ -160,39 +166,12 @@ class DirectoryClient:
         return self._client
 
     @staticmethod
-    def _resolve(client: Any, names: tuple[str, ...]):
-        """Return the first existing callable among ``names`` on the SDK client.
-
-        The Go client uses PascalCase (Push/Pull/Delete); the Python wrapper's exact
-        casing is confirmed during live verification, so we accept both forms."""
-        for n in names:
-            m = getattr(client, n, None)
-            if callable(m):
-                return m
-        raise AttributeError(f"agntcy-dir SDK Client exposes none of {names}")
-
-    @staticmethod
-    def _to_record(record_dict: dict[str, Any]) -> Any:
-        """Build the SDK Record message from an OASF JSON dict via protobuf JSON
-        parsing. The exact model module path is flagged for verification."""
-        from agntcy.dir_sdk.models import core_v1  # path to confirm (core_v1)
-        from google.protobuf import json_format
-
-        return json_format.ParseDict(record_dict, core_v1.Record())
-
-    @staticmethod
-    def _cid_of(ref: Any) -> str:
-        """Extract the CID from a structured RecordRef (no string scraping)."""
-        for attr in ("cid", "Cid"):
-            v = getattr(ref, attr, None)
-            if v:
-                return str(v)
-        getter = getattr(ref, "GetCid", None) or getattr(ref, "get_cid", None)
-        if callable(getter):
-            v = getter()
-            if v:
-                return str(v)
-        return "unknown"
+    def _to_record(oasf_dict: dict[str, Any]) -> Any:
+        """Build a ``core_v1.Record`` from an OASF JSON dict. The OASF document goes in
+        ``Record.data`` (a protobuf ``Struct``) — Record has no other fields."""
+        s = Struct()
+        ParseDict(oasf_dict, s)
+        return core_v1.Record(data=s)
 
     @staticmethod
     def _is_unreachable(exc: Exception) -> bool:
@@ -202,29 +181,28 @@ class DirectoryClient:
             for k in ("unavailable", "connection", "refused", "deadline", "dial", "no such host")
         )
 
-    def _push_sync(self, client: Any, record_dict: dict[str, Any]) -> str:
-        record = self._to_record(record_dict)
-        push = self._resolve(client, ("push", "Push"))
-        return self._cid_of(push(record))
+    def _push_sync(self, client: Any, record_dict: dict[str, Any]) -> list[Any]:
+        return client.push([self._to_record(record_dict)])
 
     # -- public API (signatures preserved for server_base / gateway) ----------
 
     async def register(self, record: OASFRecord) -> str:
-        """Best-effort publish of a MIGA ``OASFRecord`` (compat for server_base).
-        Prefer ``register_record()`` with a full OASF document."""
+        """Best-effort publish of a MIGA ``OASFRecord`` (compat for server_base)."""
         return await self.register_record(record.to_dict())
 
     async def register_record(self, record: dict[str, Any]) -> str:
-        """Publish a full OASF capability record (a parsed ``oasf/records/*.json``
-        document) via the SDK ``Push`` and return its structured CID. Returns
-        ``"standalone"``/``"error"`` if the SDK/directory is unavailable (non-fatal —
-        routing continues from the registry)."""
+        """Publish a full OASF capability record via the SDK ``push`` (list-in/list-out)
+        and return the structured ``RecordRef.cid``. Returns ``"standalone"``/``"error"``
+        if the SDK/directory is unavailable (non-fatal — routing continues)."""
+        if not _SDK_AVAILABLE:
+            logger.warning("agntcy-dir SDK not installed — AGNTCY Directory disabled (standalone)")
+            return "standalone"
         client = self._sdk()
         if client is None:
             return "standalone"
         name = record.get("name", "record")
         try:
-            cid = await asyncio.wait_for(
+            refs = await asyncio.wait_for(
                 asyncio.to_thread(self._push_sync, client, record), timeout=self.timeout
             )
         except TimeoutError:
@@ -236,23 +214,27 @@ class DirectoryClient:
                 return "standalone"
             logger.error("Directory push failed for %s: %s", name, exc)
             return "error"
+        if not refs:
+            logger.error("Directory push for %s returned no RecordRef", name)
+            return "error"
+        cid = refs[0].cid
         logger.info("Published %s to AGNTCY Directory (CID: %s)", name, cid)
         return cid
 
     async def pull(self, cid: str) -> dict[str, Any] | None:
-        """Pull a record by CID. Returns the OASF JSON dict, or None on any failure."""
+        """Pull a record by CID (list-in/list-out). Returns the OASF JSON dict (from
+        ``Record.data``), or None on any failure."""
+        if not _SDK_AVAILABLE:
+            return None
         client = self._sdk()
         if client is None:
             return None
 
         def _pull_sync() -> dict[str, Any] | None:
-            from agntcy.dir_sdk.models import core_v1
-            from google.protobuf import json_format
-
-            ref = core_v1.RecordRef(cid=cid)
-            pull = self._resolve(client, ("pull", "Pull"))
-            rec = pull(ref)
-            return json_format.MessageToDict(rec)
+            recs = client.pull([core_v1.RecordRef(cid=cid)])
+            if not recs:
+                return None
+            return MessageToDict(recs[0].data)
 
         try:
             return await asyncio.wait_for(asyncio.to_thread(_pull_sync), timeout=self.timeout)
@@ -265,27 +247,22 @@ class DirectoryClient:
         roles: list[MIGARole] | None = None,
         platform: PlatformType | None = None,
     ) -> list[OASFRecord]:
-        """Best-effort discovery via the SDK search. NOTE: routing does **not** depend
-        on this — the gateway routes from ``config/server-registry.yaml``. Returns
-        ``[]`` on any error. Search→OASFRecord mapping is intentionally left empty
-        (search returns CIDs/identifiers); wiring discovery into routing is a future
-        step, not done now."""
-        client = self._sdk()
-        if client is None:
-            return []
+        """Best-effort discovery. The real method is
+        ``search_records(SearchRecordsRequest)``, but discovery is **not** on the
+        routing path (the gateway routes from ``config/server-registry.yaml``), so the
+        request-proto builder is **intentionally not implemented** here. Returns ``[]``
+        — not faked. Wiring search into routing is a deliberate future step."""
         return []
 
     async def deregister(self, cid: str) -> bool:
+        if not _SDK_AVAILABLE:
+            return False
         client = self._sdk()
         if client is None:
             return False
 
         def _delete_sync() -> bool:
-            from agntcy.dir_sdk.models import core_v1
-
-            ref = core_v1.RecordRef(cid=cid)
-            delete = self._resolve(client, ("delete", "Delete"))
-            delete(ref)
+            client.delete([core_v1.RecordRef(cid=cid)])
             return True
 
         try:
@@ -294,9 +271,12 @@ class DirectoryClient:
             return False
 
     async def health(self) -> bool:
-        """Client-readiness check: True only if the agntcy-dir SDK is importable and a
-        Client can be constructed. This does NOT confirm the server is live — real
-        reachability is verified by the VERIFY_DIRECTORY.md runbook."""
+        """Readiness check from real state only: True only if the SDK is available AND a
+        ``Client`` constructs successfully. There is no health RPC; this is readiness,
+        not server liveness (confirmed by the VERIFY_DIRECTORY.md roundtrip). Never
+        returns True if construction raised."""
+        if not _SDK_AVAILABLE:
+            return False
         return self._sdk() is not None
 
     async def close(self):

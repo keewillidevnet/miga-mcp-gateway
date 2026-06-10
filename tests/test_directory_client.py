@@ -1,11 +1,11 @@
-"""Tests for the agntcy-dir SDK-based DirectoryClient.
+"""Tests for the agntcy-dir SDK (1.3.0) based DirectoryClient.
 
-The real SDK (agntcy-dir, from the buf.build index) and a live directory cannot run
-in CI or the sandbox, so the SDK ``Client`` is mocked at the boundary (we never import
-the real SDK here). These lock in the two things that matter regardless of the exact
-SDK surface: the structured CID is read from the RecordRef (no string scraping), and
-the best-effort / standalone fallback holds (routing never depends on the directory).
-A live roundtrip is gated behind MIGA_DIRECTORY_LIVE and skipped by default.
+The real SDK and a live directory cannot run in CI / the sandbox, so the SDK is
+mocked at the boundary (the real SDK is never imported here). These lock in the
+1.3.0 surface MIGA depends on — push is list-in/list-out, the CID comes from
+RecordRef.cid, and the OASF record is carried in Record.data — plus the best-effort
+standalone fallback (routing never depends on the directory). A live roundtrip is
+gated behind MIGA_DIRECTORY_LIVE and skipped by default.
 """
 
 from __future__ import annotations
@@ -15,138 +15,152 @@ from types import SimpleNamespace
 
 import pytest
 
+import miga_shared.agntcy as agntcy
 from miga_shared.agntcy import DirectoryClient
 
 RECORD = {"name": "Cisco ThousandEyes MCP Server", "schema_version": "1.0.0", "skills": []}
 
 
-class _FakeRef:
-    def __init__(self, cid):
-        self.cid = cid
-
-
 class _FakeClient:
-    """Stand-in for agntcy.dir_sdk.client.Client."""
+    """Mimics the 1.3.0 Client: push/pull take LISTS and return LISTS; delete -> None."""
 
-    def __init__(self, *, push_result=None, push_exc=None):
-        self._push_result = push_result
+    def __init__(self, *, push_refs=None, push_exc=None, pull_recs=None):
+        self._push_refs = push_refs if push_refs is not None else []
         self._push_exc = push_exc
-        self.closed = False
+        self._pull_recs = pull_recs if pull_recs is not None else []
+        self.deleted: list = []
 
-    def push(self, record):
+    def push(self, records):
+        assert isinstance(records, list)  # list-in
         if self._push_exc is not None:
             raise self._push_exc
-        return self._push_result
+        return self._push_refs  # list-out
 
-    def close(self):
-        self.closed = True
+    def pull(self, refs):
+        assert isinstance(refs, list)
+        return self._pull_recs
+
+    def delete(self, refs):
+        assert isinstance(refs, list)
+        self.deleted.extend(refs)
+        return None
 
 
-def _client(monkeypatch, fake):
+def _ready_client(monkeypatch, fake):
+    """A DirectoryClient wired to a fake SDK client, with the SDK marked available and
+    record construction bypassed (so no real protobuf/SDK objects are needed)."""
+    monkeypatch.setattr(agntcy, "_SDK_AVAILABLE", True)
     c = DirectoryClient(addr="agntcy-directory:8888")
     monkeypatch.setattr(c, "_sdk", lambda: fake)
-    # bypass the real protobuf/SDK model construction in _to_record
-    monkeypatch.setattr(c, "_to_record", lambda d: d)
+    monkeypatch.setattr(c, "_to_record", lambda d: d)  # bypass Struct/ParseDict/core_v1
     return c
 
 
-# -- structured CID extraction (no string scraping) --------------------------
-
-
-class TestCidExtraction:
-    def test_old_string_parser_is_gone(self):
-        assert not hasattr(DirectoryClient, "_parse_cid")
-
-    def test_cid_attr(self):
-        assert DirectoryClient._cid_of(_FakeRef("baguqeera0001")) == "baguqeera0001"
-
-    def test_getcid_method(self):
-        ref = SimpleNamespace(GetCid=lambda: "sha256:abc123")
-        assert DirectoryClient._cid_of(ref) == "sha256:abc123"
-
-    def test_unknown(self):
-        assert DirectoryClient._cid_of(SimpleNamespace()) == "unknown"
-
-
-class TestResolve:
-    def test_prefers_lowercase_then_pascal(self):
-        pushed = []
-        c = SimpleNamespace(Push=lambda r: pushed.append(r))
-        resolved = DirectoryClient._resolve(c, ("push", "Push"))
-        assert resolved is c.Push  # found "Push" since "push" is absent
-
-    def test_raises_when_absent(self):
-        with pytest.raises(AttributeError):
-            DirectoryClient._resolve(SimpleNamespace(), ("push", "Push"))
-
-
-# -- register_record: success + best-effort fallbacks ------------------------
+# -- register_record: list-in/list-out + structured CID ----------------------
 
 
 class TestRegisterRecord:
     @pytest.mark.asyncio
-    async def test_success_returns_structured_cid(self, monkeypatch):
-        c = _client(monkeypatch, _FakeClient(push_result=_FakeRef("baguqeeratest0001")))
+    async def test_success_reads_first_recordref_cid(self, monkeypatch):
+        fake = _FakeClient(push_refs=[SimpleNamespace(cid="baguqeeratest0001")])
+        c = _ready_client(monkeypatch, fake)
         assert await c.register_record(RECORD) == "baguqeeratest0001"
 
     @pytest.mark.asyncio
-    async def test_sdk_not_installed_is_standalone(self, monkeypatch):
-        c = DirectoryClient()
-        monkeypatch.setattr(c, "_sdk", lambda: None)  # simulates ImportError path
-        assert await c.register_record(RECORD) == "standalone"
+    async def test_empty_refs_is_error(self, monkeypatch):
+        c = _ready_client(monkeypatch, _FakeClient(push_refs=[]))
+        assert await c.register_record(RECORD) == "error"
 
     @pytest.mark.asyncio
     async def test_unreachable_is_standalone(self, monkeypatch):
-        c = _client(
+        c = _ready_client(
             monkeypatch, _FakeClient(push_exc=RuntimeError("rpc error: connection refused"))
         )
         assert await c.register_record(RECORD) == "standalone"
 
     @pytest.mark.asyncio
     async def test_validation_error_is_error(self, monkeypatch):
-        c = _client(
-            monkeypatch, _FakeClient(push_exc=ValueError("record validation failed: bad skill id"))
-        )
+        c = _ready_client(monkeypatch, _FakeClient(push_exc=ValueError("record validation failed")))
         assert await c.register_record(RECORD) == "error"
 
     @pytest.mark.asyncio
     async def test_register_oasfrecord_delegates(self, monkeypatch):
         from miga_shared.agntcy import OASFRecord
 
-        c = _client(monkeypatch, _FakeClient(push_result=_FakeRef("baguqeeraXYZ")))
+        fake = _FakeClient(push_refs=[SimpleNamespace(cid="baguqeeraXYZ")])
+        c = _ready_client(monkeypatch, fake)
         assert await c.register(OASFRecord(name="infer_mcp")) == "baguqeeraXYZ"
 
 
-# -- best-effort safety on the other ops -------------------------------------
+# -- pull / delete via list APIs ---------------------------------------------
 
 
-class TestBestEffortOps:
+class TestPullDelete:
     @pytest.mark.asyncio
-    async def test_pull_none_when_unavailable(self, monkeypatch):
-        c = DirectoryClient()
-        monkeypatch.setattr(c, "_sdk", lambda: None)
-        assert await c.pull("baguqeera0001") is None
-
-    @pytest.mark.asyncio
-    async def test_discover_empty_when_unavailable(self, monkeypatch):
-        c = DirectoryClient()
-        monkeypatch.setattr(c, "_sdk", lambda: None)
-        assert await c.discover(skills=["x"]) == []
-
-    @pytest.mark.asyncio
-    async def test_deregister_false_when_unavailable(self, monkeypatch):
-        c = DirectoryClient()
-        monkeypatch.setattr(c, "_sdk", lambda: None)
-        assert await c.deregister("baguqeera0001") is False
+    async def test_pull_returns_record_data_dict(self, monkeypatch):
+        rec = SimpleNamespace(data={"schema_version": "1.0.0", "name": "x"})
+        c = _ready_client(monkeypatch, _FakeClient(pull_recs=[rec]))
+        # Record.data is a protobuf Struct in reality; MessageToDict converts it.
+        monkeypatch.setattr(agntcy, "MessageToDict", lambda d, **k: d)
+        monkeypatch.setattr(
+            agntcy, "core_v1", SimpleNamespace(RecordRef=lambda cid: SimpleNamespace(cid=cid))
+        )
+        out = await c.pull("baguqeera0001")
+        assert out and out["schema_version"] == "1.0.0"
 
     @pytest.mark.asyncio
-    async def test_health_false_when_sdk_absent(self, monkeypatch):
-        c = DirectoryClient()
-        monkeypatch.setattr(c, "_sdk", lambda: None)
-        assert await c.health() is False
+    async def test_pull_empty_list_returns_none(self, monkeypatch):
+        c = _ready_client(monkeypatch, _FakeClient(pull_recs=[]))
+        monkeypatch.setattr(
+            agntcy, "core_v1", SimpleNamespace(RecordRef=lambda cid: SimpleNamespace(cid=cid))
+        )
+        assert await c.pull("nope") is None
 
     @pytest.mark.asyncio
-    async def test_health_true_when_sdk_present(self, monkeypatch):
+    async def test_deregister_calls_delete_with_list(self, monkeypatch):
+        fake = _FakeClient()
+        c = _ready_client(monkeypatch, fake)
+        monkeypatch.setattr(
+            agntcy, "core_v1", SimpleNamespace(RecordRef=lambda cid: SimpleNamespace(cid=cid))
+        )
+        assert await c.deregister("baguqeera0001") is True
+        assert len(fake.deleted) == 1 and fake.deleted[0].cid == "baguqeera0001"
+
+
+# -- SDK-absent standalone path (the sandbox's natural state) -----------------
+
+
+class TestSdkAbsentStandalone:
+    @pytest.mark.asyncio
+    async def test_register_record_standalone(self, monkeypatch):
+        monkeypatch.setattr(agntcy, "_SDK_AVAILABLE", False)
+        assert await DirectoryClient().register_record(RECORD) == "standalone"
+
+    @pytest.mark.asyncio
+    async def test_pull_none(self, monkeypatch):
+        monkeypatch.setattr(agntcy, "_SDK_AVAILABLE", False)
+        assert await DirectoryClient().pull("x") is None
+
+    @pytest.mark.asyncio
+    async def test_deregister_false(self, monkeypatch):
+        monkeypatch.setattr(agntcy, "_SDK_AVAILABLE", False)
+        assert await DirectoryClient().deregister("x") is False
+
+    @pytest.mark.asyncio
+    async def test_health_false(self, monkeypatch):
+        monkeypatch.setattr(agntcy, "_SDK_AVAILABLE", False)
+        assert await DirectoryClient().health() is False
+
+    @pytest.mark.asyncio
+    async def test_discover_empty(self, monkeypatch):
+        monkeypatch.setattr(agntcy, "_SDK_AVAILABLE", False)
+        assert await DirectoryClient().discover(skills=["x"]) == []
+
+
+class TestHealthReady:
+    @pytest.mark.asyncio
+    async def test_health_true_when_client_constructs(self, monkeypatch):
+        monkeypatch.setattr(agntcy, "_SDK_AVAILABLE", True)
         c = DirectoryClient()
         monkeypatch.setattr(c, "_sdk", lambda: _FakeClient())
         assert await c.health() is True
@@ -154,6 +168,9 @@ class TestBestEffortOps:
     def test_default_addr_is_grpc_not_http(self):
         c = DirectoryClient()
         assert c.addr == "agntcy-directory:8888" and "http" not in c.addr
+
+    def test_old_string_parser_is_gone(self):
+        assert not hasattr(DirectoryClient, "_parse_cid")
 
 
 # -- live integration (opt-in only) ------------------------------------------

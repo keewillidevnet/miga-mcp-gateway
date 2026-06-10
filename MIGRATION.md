@@ -292,21 +292,24 @@ access, so the SDK can't be installed and the directory can't be brought up):
   (`ghcr.io/agntcy/dir-apiserver`, gRPC `:8888`, `grpc-health-probe`), `zot`
   (`ghcr.io/project-zot/zot:v2.1.16`), `dir-postgres` (`bitnami/postgresql:16`), and
   `dir-reconciler` — with **pinned tags** (apiserver/reconciler at the chart appVersion
-  `1.16.0`, to confirm against ghcr) and OASF validation pointed at
+  `v1.3.0`, confirmed name; tag to confirm against ghcr) and OASF validation pointed at
   `https://schema.oasf.outshift.com` (records are OASF 1.0.0).
 - `miga_shared/agntcy/DirectoryClient` uses the official **`agntcy-dir` Python SDK**
-  (`agntcy.dir_sdk.client.Client` / `Config`), which runs natively in the Python
-  gateway. The earlier "dir is Go-only" premise was wrong; the dirctl-subprocess client
-  (and its CLI text-output CID scraping) has been removed. Publish reads the
-  **structured `RecordRef.cid`** from the SDK's `Push`. The SDK needs `dirctl` only for
-  *signing*, which MIGA does not use, so **no `dirctl` binary is required in the gateway
-  image**.
+  (`agntcy.dir_sdk.client.Client` / `Config`), reconciled to the **1.3.0 surface
+  confirmed by live introspection** (`dir(Client)` + `inspect.signature`). The earlier
+  "dir is Go-only" premise was wrong, and the Go-derived mapping was wrong on several
+  counts now corrected: `push(records: list) -> list[RecordRef]` (list-in/list-out),
+  the OASF doc is carried in `Record.data` (a protobuf `Struct`, built via
+  `core_v1.Record(data=Struct(...))`), and the CID is the structured `RecordRef.cid`.
+  The dirctl subprocess and its text-output CID scraping are removed. The SDK needs
+  `dirctl` only for *signing*, which MIGA does not use, so **no `dirctl` in the gateway
+  image**. Surface confirmed by introspection; the **live roundtrip is still pending**.
 - Best-effort semantics preserved: if the SDK is not installed or the directory is
   unreachable, the client returns `standalone`/`error` and the gateway keeps routing
   from `config/server-registry.yaml`. Routing never depends on the directory.
 - Dependency added: `agntcy-dir` in `requirements.txt` / `pyproject.toml`, installed
   from the buf.build index (`uv add agntcy-dir --index https://buf.build/gen/python`);
-  the pinned version is a **placeholder to confirm** post-install.
+  pinned to the confirmed **`agntcy-dir==1.3.0`**.
 - **Not done / pending live verification:** confirm exact ghcr image tags; confirm the
   exact SDK published version; confirm Python method names/casing (`push`/`Push`,
   `pull`, `delete`, search) and the OASF-JSON→`core_v1.Record` construction and
