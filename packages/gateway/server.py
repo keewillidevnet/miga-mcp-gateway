@@ -36,6 +36,7 @@ from starlette.responses import JSONResponse
 from miga_shared.agntcy import DirectoryClient, IdentityBadge
 from miga_shared.models import MIGARole
 from miga_shared.registry import ServerSpec, load_registry
+from miga_shared.role_skills import load_role_skills
 from miga_shared.transport import MCPClientPool, MCPTransportError
 from miga_shared.utils.redis_bus import RedisPubSub
 
@@ -111,6 +112,43 @@ class RoutingTable:
     def servers_for_role(self, role: MIGARole) -> list[ServerSpec]:
         return list(self._by_role.get(role, []))
 
+    async def discovered_servers_for_role(
+        self,
+        role: MIGARole,
+        directory,
+        role_skills: dict[str, list[str]],
+    ) -> list[ServerSpec] | None:
+        """Resolve a role's servers via a live directory search.
+
+        Searches the AGNTCY Directory for the role's OASF skills, maps each matched
+        record back to a registry ServerSpec via its ``miga_registry_ref`` annotation,
+        dedupes, and keeps only specs whose registry roles include this role. Returns
+        ``None`` (not ``[]``) when discovery is unavailable or yields nothing, to signal
+        "fall back to the static registry". Never raises; the directory client is
+        best-effort.
+        """
+        role_value = role.value if hasattr(role, "value") else str(role)
+        skills = role_skills.get(role_value) or []
+        if not skills:
+            return None
+        try:
+            results = await directory.discover(skills=skills)
+        except Exception as exc:  # noqa: BLE001 - defensive; discovery must not break routing
+            logger.warning("directory discovery raised for role %s: %r", role_value, exc)
+            return None
+        if not results:
+            return None
+        specs: list[ServerSpec] = []
+        seen: set[str] = set()
+        for r in results:
+            ref = r.get("registry_ref")
+            spec = self._by_name.get(ref) if ref else None
+            if spec is None or spec.name in seen or role_value not in spec.roles:
+                continue
+            seen.add(spec.name)
+            specs.append(spec)
+        return specs or None
+
     def get(self, name: str) -> ServerSpec | None:
         return self._by_name.get(name)
 
@@ -162,6 +200,7 @@ async def app_lifespan():
 
     specs = load_registry()
     routing.load_from_registry(specs)
+    role_skills = load_role_skills()
     _published = await _publish_oasf_records(directory, specs)
     logger.info("Published %d/%d OASF records to AGNTCY Directory", _published, len(specs))
 
@@ -179,6 +218,7 @@ async def app_lifespan():
             "routing": routing,
             "pool": pool,
             "directory": directory,
+            "role_skills": role_skills,
             "bus": bus,
             "badge": badge,
             "start_time": start,
@@ -254,9 +294,38 @@ async def _call_named_tool(
     return f"❌ Tool `{tool_name}` not found on any server for this role."
 
 
+def _discovery_enabled() -> bool:
+    return os.getenv("MIGA_DISCOVERY_ROUTING", "").strip().lower() in ("1", "true", "yes", "on")
+
+
+async def _resolve_servers(role: MIGARole, ctx) -> list[ServerSpec]:
+    """Pick the servers for a role. Default: the static registry (byte-for-byte the
+    prior behavior). With MIGA_DISCOVERY_ROUTING enabled and a directory in
+    lifespan_state, try a live directory search first and fall back to static on any
+    empty/unavailable result."""
+    if _discovery_enabled() and ctx is not None:
+        state = getattr(getattr(ctx, "request_context", None), "lifespan_state", None) or {}
+        directory = state.get("directory")
+        role_skills = state.get("role_skills") or {}
+        if directory is not None:
+            discovered = await routing.discovered_servers_for_role(role, directory, role_skills)
+            if discovered:
+                logger.info(
+                    "role %s resolved via directory search: %s",
+                    role.value,
+                    [s.name for s in discovered],
+                )
+                return discovered
+            logger.info(
+                "directory discovery empty/unavailable for role %s; using static registry",
+                role.value,
+            )
+    return routing.servers_for_role(role)
+
+
 async def _fan_out(role: MIGARole, params: RoleQueryInput, ctx) -> str:
     """Fan out a query to all real servers (plus INFER) serving a given role."""
-    servers = routing.servers_for_role(role)
+    servers = await _resolve_servers(role, ctx)
     if params.platforms:
         wanted = set(params.platforms)
         servers = [s for s in servers if s.name in wanted]

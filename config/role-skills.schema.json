@@ -1,0 +1,23 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://github.com/keewillidevnet/miga-mcp-gateway/config/role-skills.schema.json",
+  "title": "MIGA Role -> OASF Skills map",
+  "description": "Maps each MIGA role to the OASF skill names used for directory-search discovery routing.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "observability": {"$ref": "#/definitions/skillList"},
+    "security": {"$ref": "#/definitions/skillList"},
+    "automation": {"$ref": "#/definitions/skillList"},
+    "configuration": {"$ref": "#/definitions/skillList"},
+    "compliance": {"$ref": "#/definitions/skillList"},
+    "identity": {"$ref": "#/definitions/skillList"}
+  },
+  "definitions": {
+    "skillList": {
+      "type": "array",
+      "items": {"type": "string", "minLength": 1},
+      "uniqueItems": true
+    }
+  }
+}
