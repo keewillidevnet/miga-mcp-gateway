@@ -1,105 +1,99 @@
 # Contributing to MIGA
 
-Thank you for your interest in contributing to MIGA! This project is designed
-to make contribution easy — especially for implementing stub servers.
+Thank you for your interest in contributing to MIGA! MIGA is an **aggregation /
+fusion layer**: it routes to real, published MCP servers across the ecosystem and
+adds cross-platform reasoning via INFER. Contributing a platform therefore means
+**registering an existing MCP server** so the gateway can route to it — not writing
+a new server implementation inside this repo.
 
 ## Quick Start
 
 ```bash
-git clone https://github.com/your-org/miga.git && cd miga
+git clone https://github.com/keewillidevnet/miga-mcp-gateway.git && cd miga-mcp-gateway
 cp .env.example .env
 docker compose up -d
+python -m packages.cli.miga_cli status
 ```
 
-## Implementing a Stub Server
+## Architecture in one paragraph
 
-The fastest way to contribute is to implement one of the 6 stubbed platform
-servers. Each stub already has:
+`config/server-registry.yaml` is the single source of truth for **how the gateway
+connects** to each downstream MCP server (transport, endpoint/command, auth, env
+vars). Each server also publishes an **OASF capability record** (`oasf/records/`)
+so it is discoverable via the AGNTCY Directory. The gateway loads the registry
+(`miga_shared/registry.py`) and connects as an MCP **client** over the right
+transport (`miga_shared/transport.py`): remote HTTP/SSE URLs or local stdio
+subprocesses (including the `docker run -i` pattern). MIGA does not re-vendor or
+re-implement upstream server logic. The only MIGA-original server is **INFER**
+(`servers/infer_mcp`).
 
-- ✅ Typed tool signatures (Pydantic input models)
-- ✅ OASF capability record (auto-registers with AGNTCY Directory)
-- ✅ Lifecycle management (Redis, health check, Directory registration)
-- ✅ Mock response data (shows expected output format)
-- ✅ Docker Compose service definition
+## Adding a platform (the normal contribution)
 
-**Available stubs:**
+You are wiring up an existing, published MCP server. No new `servers/<platform>`
+directory is created.
 
-| Server | File | Platform Docs |
-|--------|------|--------------|
-| AppDynamics | `servers/appdynamics_mcp/server.py` | [AppDynamics API](https://docs.appdynamics.com/latest/en/extend-appdynamics/appdynamics-apis) |
-| Nexus Dashboard | `servers/nexus_dashboard_mcp/server.py` | [ND API](https://developer.cisco.com/docs/nexus-dashboard/) |
-| SD-WAN | `servers/sdwan_mcp/server.py` | [SD-WAN API](https://developer.cisco.com/docs/sdwan/) |
-| ISE | `servers/ise_mcp/server.py` | [ISE ERS API](https://developer.cisco.com/docs/identity-services-engine/) |
-| Splunk | `servers/splunk_mcp/server.py` | [Splunk REST API](https://docs.splunk.com/Documentation/Splunk/latest/RESTREF/) |
-| Hypershield | `servers/hypershield_mcp/server.py` | [Hypershield Docs](https://www.cisco.com/c/en/us/products/security/hypershield/) |
+1. **Add a registry entry** to `config/server-registry.yaml` with: `name`,
+   `display_name`, `status` (`official` | `cisco_devnet_community` | `community`),
+   `roles`, a `transport` block, a `deployment` block, `env_required` (env var
+   *names* only — never secrets), and the `oasf_record` path. Validate it:
 
-### Step-by-Step
-
-1. **Pick a stub** from the table above
-2. **Read the existing stub** to understand the tool signatures and mock data
-3. **Add the API client factory** to `miga_shared/clients/__init__.py`:
-   ```python
-   @classmethod
-   def for_appdynamics(cls) -> CiscoAPIClient:
-       return cls(
-           base_url=os.getenv("APPDYNAMICS_CONTROLLER_URL", ""),
-           headers={"Authorization": f"Bearer {os.getenv('APPDYNAMICS_API_KEY', '')}"},
-           platform_name="appdynamics",
-       )
-   ```
-4. **Replace mock data with real API calls** in each tool function
-5. **Publish events to Redis** for INFER correlation (see existing servers for pattern)
-6. **Test locally**:
    ```bash
-   # Add your credentials to .env
-   docker compose up -d appdynamics-mcp
-   # Or include stubs: docker compose --profile stubs up -d
+   python - <<'PY'
+   import yaml, json, jsonschema
+   reg = yaml.safe_load(open("config/server-registry.yaml"))
+   schema = json.load(open("config/server-registry.schema.json"))
+   jsonschema.validate(reg, schema)
+   print("registry valid")
+   PY
    ```
-7. **Submit a PR** — we'll review and merge!
 
-### Tool Implementation Pattern
+   - **Remote HTTP/SSE server** → `transport: {type: http, url: ..., auth: {...}}`,
+     `deployment: {kind: remote_managed}`. Reference it by URL; do **not** add a
+     compose service.
+   - **Container you run** → `transport: {type: http, url: http://<svc>:<port>/mcp}`,
+     `deployment: {kind: docker_compose, compose_service: <svc>, ports: [...]}`, and
+     add the service to `docker-compose.yml` wired from `.env`.
+   - **Docker stdio image** → `transport: {type: stdio, command: docker, args: [run, -i, --rm, -e, VAR, ..., <image>]}`,
+     `deployment: {kind: docker_image, image: <image>}`.
+   - **Local stdio process** (bundled in the gateway image) →
+     `transport: {type: stdio, command: ..., args: [...]}`,
+     `deployment: {kind: local_process}`.
 
-Every tool follows the same pattern used by the fully-implemented servers:
+2. **Author an OASF record** at the `oasf_record` path, following
+   `oasf/OASF_RECORDS.md`. Every skill/domain/module `name` and numeric `id` **must**
+   come from the live OASF catalogs (skill_categories / domain_categories /
+   module_categories) — do not invent ids. Validate the record against the OASF
+   schema/validation endpoint before submitting.
 
-```python
-@mcp.tool(name="platform_get_something", annotations={"readOnlyHint": True})
-async def get_something(params: SomeInput, ctx=None) -> str:
-    # 1. Get API client from lifespan state
-    api: CiscoAPIClient = ctx.request_context.lifespan_state["api"]
-    bus: RedisPubSub = ctx.request_context.lifespan_state["bus"]
+3. **Wire env + deployment**: add every `env_required` var to `.env.example`
+   (grouped by platform, placeholder values, no secrets). For compose servers add
+   the service to `docker-compose.yml`; for stdio servers confirm the gateway image
+   can spawn the command.
 
-    # 2. Call the platform API
-    data = await api.get("/some/endpoint", params={...})
+4. **Verify**:
 
-    # 3. Publish events for INFER (if applicable)
-    await bus.publish_telemetry("platform_name", {"type": "event_type", "data": data})
+   ```bash
+   pytest -q
+   ruff check . && ruff format --check .
+   python -m packages.cli.miga_cli status   # your server should appear in the list
+   ```
 
-    # 4. Format and return Markdown response
-    return f"## Result\n\n{Fmt.table(headers, rows)}"
-```
+The gateway discovers and routes to your server automatically from the registry —
+**no gateway code changes are required.**
 
-## Adding a New Platform
+## Working on INFER
 
-To add an entirely new platform server (not one of the existing stubs):
-
-1. Create `servers/your_platform_mcp/server.py`
-2. Define an `OASFRecord` with capabilities, roles, and skills
-3. Use `miga_lifespan()` for standard lifecycle
-4. Add `add_health_tool()` for health checks
-5. Add Docker Compose service in `docker-compose.yml`
-6. Add the platform to `PlatformType` enum in `miga_shared/models.py`
-7. Add API client factory in `miga_shared/clients/__init__.py`
-
-The Gateway will automatically discover your new server via AGNTCY Directory
-— no Gateway code changes required.
+INFER (`servers/infer_mcp`) is MIGA's own fusion engine and the one server whose
+logic lives in this repo. Improvements to correlation, root-cause templates, anomaly
+detection, prediction, or risk scoring are welcome. INFER consumes the normalized
+output of whatever servers are registered, so keep it platform-agnostic.
 
 ## Code Style
 
 - Python 3.11+
 - Ruff for linting and formatting (`ruff check .` and `ruff format .`)
 - Type hints on all public functions
-- Pydantic models for all tool inputs
-- Docstrings on all tools (shown to MCP clients)
+- Pydantic models for tool inputs; docstrings on all tools (shown to MCP clients)
 
 ## Testing
 
@@ -107,11 +101,15 @@ The Gateway will automatically discover your new server via AGNTCY Directory
 pytest tests/ -v
 ```
 
+Tests that exercise downstream connectivity must **mock the MCP client transport**
+(see `tests/test_transport.py` and `tests/test_gateway.py`) — never require live
+credentials.
+
 ## Commit Messages
 
-Use conventional commits: `feat(meraki): add wireless channel utilization tool`
+Use conventional commits, e.g. `feat(registry): add Cisco Nexus Dashboard MCP entry`.
 
 ## License
 
-By contributing, you agree that your contributions will be licensed under
-the Apache 2.0 License.
+By contributing, you agree that your contributions will be licensed under the
+Apache 2.0 License.

@@ -2,7 +2,7 @@
   "name": "Cisco Identity Services Engine (ISE) MCP Server",
   "description": "Read-only access to Cisco ISE identity, endpoint, policy, and posture data via ERS and MnT: sessions, endpoints, authorization policy, and compliance posture.",
   "version": "1.0.0",
-  "schema_version": "1.0.4",
+  "schema_version": "1.0.0",
   "authors": [
     "Keenan Williams"
   ],
@@ -12,25 +12,25 @@
   },
   "skills": [
     {
-      "name": "retrieval_of_information",
+      "name": "retrieval_augmented_generation/retrieval_of_information",
       "id": 601
     },
     {
-      "name": "audit_trail_summarization",
+      "name": "governance_compliance/audit_trail_summarization",
       "id": 1303
     },
     {
-      "name": "risk_classification",
+      "name": "governance_compliance/risk_classification",
       "id": 1304
     }
   ],
   "domains": [
     {
-      "name": "identity_management",
+      "name": "technology/security/identity_management",
       "id": 10705
     },
     {
-      "name": "network_security",
+      "name": "technology/networking/network_security",
       "id": 10305
     }
   ],

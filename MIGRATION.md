@@ -237,6 +237,25 @@ touching the do-not-touch internals**:
 Result: `ruff check .` and `ruff format --check .` both pass; `pytest` is 115 passed,
 4 xfailed (pre-existing webex_bot NLP behavior, verified identical on `main`).
 
+## Known tech debt (intentionally untouched)
+
+The following pre-existing references to dropped platforms remain in do-not-touch
+files and are tracked for a future cleanup; none are wired into routing/registry:
+
+- `miga_shared/models.py` — the `PlatformType` enum still defines `WEBEX`, `XDR`,
+  `SECURITY_CLOUD_CONTROL`, `APPDYNAMICS`, `NEXUS_DASHBOARD`, `HYPERSHIELD`. The enum
+  is referenced by INFER and other models, so it was left intact.
+- `miga_shared/clients/__init__.py` — the dead `CiscoAPIClient.for_xdr()` and
+  `for_security_cloud_control()` factory methods are unused but left in place.
+- `servers/infer_mcp/server.py` — a few expert RCA templates reference `"xdr"` /
+  `"security_cloud_control"` event sources as strings; INFER internals are
+  unchanged, so these templates simply never match now.
+
+(The post-migration cleanup branch removed the other two stragglers: the hardcoded
+platform list in `packages/cli/miga_cli.py`, now derived from the registry, and the
+stale `docs/CONTRIBUTING.md` stub-creation flow, now rewritten for the registry +
+OASF model.)
+
 ## License
 
 Apache-2.0 preserved (`LICENSE` unchanged). No source files carried per-file SPDX

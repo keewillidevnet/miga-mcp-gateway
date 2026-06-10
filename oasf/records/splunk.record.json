@@ -2,7 +2,7 @@
   "name": "Splunk MCP Server",
   "description": "Runs SPL searches and retrieves Splunk events, saved searches, and alerts for operational and security analytics (SIEM), with guardrails against destructive operations.",
   "version": "1.0.0",
-  "schema_version": "1.0.4",
+  "schema_version": "1.0.0",
   "authors": [
     "Keenan Williams"
   ],
@@ -12,29 +12,29 @@
   },
   "skills": [
     {
-      "name": "information_retrieval_synthesis_search",
+      "name": "natural_language_processing/information_retrieval_synthesis/information_retrieval_synthesis_search",
       "id": 10306
     },
     {
-      "name": "threat_detection",
+      "name": "security_privacy/threat_detection",
       "id": 801
     },
     {
-      "name": "anomaly_detection",
+      "name": "evaluation_monitoring/anomaly_detection",
       "id": 1104
     },
     {
-      "name": "monitoring_alerting",
+      "name": "devops_mlops/monitoring_alerting",
       "id": 1205
     }
   ],
   "domains": [
     {
-      "name": "cybersecurity",
+      "name": "technology/security/cybersecurity",
       "id": 10701
     },
     {
-      "name": "network_operations",
+      "name": "technology/networking/network_operations",
       "id": 10301
     }
   ],

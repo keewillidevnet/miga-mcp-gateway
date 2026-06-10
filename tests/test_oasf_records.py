@@ -41,7 +41,7 @@ def test_required_fields_present(field):
 
 def test_schema_version_pinned():
     for _, rec in _records():
-        assert rec["schema_version"] == "1.0.4"
+        assert rec["schema_version"] == "1.0.0"
 
 
 def test_created_at_rfc3339():

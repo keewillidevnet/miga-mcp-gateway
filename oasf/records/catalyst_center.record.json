@@ -2,7 +2,7 @@
   "name": "Cisco Catalyst Center MCP Server",
   "description": "Cisco Catalyst Center (DNA Center) assurance and inventory: device health, client health, sites, and network issues for observability, configuration, and automation.",
   "version": "1.0.0",
-  "schema_version": "1.0.4",
+  "schema_version": "1.0.0",
   "authors": [
     "Keenan Williams"
   ],
@@ -12,25 +12,25 @@
   },
   "skills": [
     {
-      "name": "performance_monitoring",
+      "name": "evaluation_monitoring/performance_monitoring",
       "id": 1105
     },
     {
-      "name": "retrieval_of_information",
+      "name": "retrieval_augmented_generation/retrieval_of_information",
       "id": 601
     },
     {
-      "name": "workflow_automation",
+      "name": "tool_interaction/workflow_automation",
       "id": 1402
     }
   ],
   "domains": [
     {
-      "name": "network_operations",
+      "name": "technology/networking/network_operations",
       "id": 10301
     },
     {
-      "name": "network_management",
+      "name": "technology/networking/network_management",
       "id": 10302
     }
   ],
