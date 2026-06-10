@@ -286,28 +286,32 @@ main item to address before any AGNTCY-Directory-dependent claim is load-bearing
 
 **Status update (branch `feat/agntcy-directory-real`):** the real wiring is now
 **drafted** and pending operator verification (it could **not** be verified in the
-build sandbox — no container-registry egress, so the images can't be pulled and the
-directory can't be brought up):
-- `docker-compose.yml` now defines the real stack — `agntcy-directory`
+build sandbox — no container-registry egress and likely no buf.build Python index
+access, so the SDK can't be installed and the directory can't be brought up):
+- `docker-compose.yml` defines the real stack — `agntcy-directory`
   (`ghcr.io/agntcy/dir-apiserver`, gRPC `:8888`, `grpc-health-probe`), `zot`
   (`ghcr.io/project-zot/zot:v2.1.16`), `dir-postgres` (`bitnami/postgresql:16`), and
-  `dir-reconciler` — with **pinned tags** (apiserver/reconciler at the chart
-  appVersion `1.16.0`; tags to be confirmed against ghcr.io) and OASF validation
-  pointed at `https://schema.oasf.outshift.com`.
-- `miga_shared/agntcy/DirectoryClient` was rewritten from the REST `/v1/records`
-  mock to the **official `dirctl` CLI** (argv subprocess, `shell=False`): `push`
-  (publish → CID), `pull`, `search`, `delete`. Best-effort semantics preserved — if
-  `dirctl` is absent or the directory is unreachable, it returns `standalone`/`error`
-  and the gateway keeps routing from `config/server-registry.yaml`.
-- Rationale for `dirctl` over hand-rolled gRPC stubs: `dir` is Go-only (no Python
-  SDK); the store path is OCI-artifact + content-addressed (CID) and `dirctl`
-  encapsulates that packaging — raw stubs would mean re-vendoring upstream logic.
-- **Not done / pending live verification:** confirm exact ghcr image tags; confirm
-  `dirctl push` CID output format (the parser is defensive); confirm `dirctl search`
-  flags; ensure the gateway image has `dirctl` on PATH (or set `DIRCTL_BIN`); confirm
-  the `reconciler.env` keys. The README AGNTCY claims stay **planned** until
-  `VERIFY_DIRECTORY.md` passes on a networked Docker host.
-
+  `dir-reconciler` — with **pinned tags** (apiserver/reconciler at the chart appVersion
+  `1.16.0`, to confirm against ghcr) and OASF validation pointed at
+  `https://schema.oasf.outshift.com` (records are OASF 1.0.0).
+- `miga_shared/agntcy/DirectoryClient` uses the official **`agntcy-dir` Python SDK**
+  (`agntcy.dir_sdk.client.Client` / `Config`), which runs natively in the Python
+  gateway. The earlier "dir is Go-only" premise was wrong; the dirctl-subprocess client
+  (and its CLI text-output CID scraping) has been removed. Publish reads the
+  **structured `RecordRef.cid`** from the SDK's `Push`. The SDK needs `dirctl` only for
+  *signing*, which MIGA does not use, so **no `dirctl` binary is required in the gateway
+  image**.
+- Best-effort semantics preserved: if the SDK is not installed or the directory is
+  unreachable, the client returns `standalone`/`error` and the gateway keeps routing
+  from `config/server-registry.yaml`. Routing never depends on the directory.
+- Dependency added: `agntcy-dir` in `requirements.txt` / `pyproject.toml`, installed
+  from the buf.build index (`uv add agntcy-dir --index https://buf.build/gen/python`);
+  the pinned version is a **placeholder to confirm** post-install.
+- **Not done / pending live verification:** confirm exact ghcr image tags; confirm the
+  exact SDK published version; confirm Python method names/casing (`push`/`Push`,
+  `pull`, `delete`, search) and the OASF-JSON→`core_v1.Record` construction and
+  `RecordRef.cid` attribute; confirm `server_address` env wiring. The README AGNTCY
+  claims stay **planned** until `VERIFY_DIRECTORY.md` passes on a networked Docker host.
 ## License
 
 Apache-2.0 preserved (`LICENSE` unchanged). No source files carried per-file SPDX

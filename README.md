@@ -267,9 +267,11 @@ Agents framework (Linux Foundation). Honest status of each piece:
 
 > **In progress:** wiring to the *real* AGNTCY Directory — the `dir-apiserver`
 > gRPC service + `zot` OCI registry + `postgres` + `reconciler`, driven through the
-> official `dirctl` client — is drafted on branch `feat/agntcy-directory-real` and is
-> **pending live verification** on a networked Docker host (see `VERIFY_DIRECTORY.md`).
-> The directory/discovery items above remain **planned** until that verification passes.
+> official **`agntcy-dir` Python SDK** (`agntcy.dir_sdk`) running natively in the
+> gateway (no `dirctl` binary required at runtime) — is drafted on branch
+> `feat/agntcy-directory-real` and is **pending live verification** on a networked
+> Docker host (see `VERIFY_DIRECTORY.md`). The directory/discovery items above remain
+> **planned** until that verification passes.
 
 **What is real and load-bearing:** a registry-driven gateway fronting 8 real external
 MCP servers plus INFER, with a validated OASF 1.0.0 capability record per server.

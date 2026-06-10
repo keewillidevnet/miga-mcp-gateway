@@ -1,106 +1,113 @@
-# VERIFY_DIRECTORY.md — live verification runbook for the real AGNTCY Directory
+# VERIFY_DIRECTORY.md — live verification runbook (agntcy-dir Python SDK)
 
 > Status: the integration on branch `feat/agntcy-directory-real` was **written but
-> NOT verified** in the build sandbox — that environment has no container-registry
-> egress (ghcr.io pulls return `denied`), so the directory images cannot be pulled
-> and the stack cannot be brought up. Run this on a **networked Docker host**. Until
-> every success criterion below passes, **leave the README AGNTCY directory/discovery
-> claims at "planned."**
+> NOT verified**. The build sandbox has no container-registry egress (ghcr.io pulls
+> return `denied`) and likely no access to the buf.build Python index, so the
+> `agntcy-dir` SDK could not be installed and the directory could not be brought up.
+> Run this on a **networked Docker host**. Until every success criterion passes,
+> **leave the README AGNTCY directory/discovery claims at "planned."**
 
 ## What this verifies
-That MIGA can publish an OASF record to a real AGNTCY Directory (`dir-apiserver` gRPC
-+ `zot` OCI registry + `postgres` + `reconciler`) and read it back, and that when the
-directory is **down** the gateway still runs (routing from `config/server-registry.yaml`).
-
-## Prerequisites
-- Docker + Docker Compose v2; outbound access to `ghcr.io` and `schema.oasf.outshift.com`.
-- The `dirctl` CLI available to the gateway (one of):
-  - install the binary on the gateway image / host and leave `DIRCTL_BIN=dirctl`, or
-  - point `DIRCTL_BIN` at a mounted binary, or
-  - run `dirctl` from the `ghcr.io/agntcy/dir-ctl` image.
-- A populated `.env` (`cp .env.example .env`).
+That MIGA, using the official **`agntcy-dir` Python SDK** (`agntcy.dir_sdk`) natively
+in the gateway, can **publish** an OASF record to a real AGNTCY Directory
+(`dir-apiserver` gRPC + `zot` OCI registry + `postgres` + `reconciler`) and read it
+back (positive success), and that when the directory is **down** the gateway still
+serves routing from `config/server-registry.yaml` (standalone fallback). No `dirctl`
+binary is required at runtime (the SDK needs it only for signing, which MIGA omits).
 
 ## ⚠️ Assumptions to confirm first (could not be checked offline)
-1. **Image tags.** `docker-compose.yml` pins `ghcr.io/agntcy/dir-apiserver:1.16.0`
-   and `ghcr.io/agntcy/dir-reconciler:1.16.0` (the dir chart appVersion) and
-   `ghcr.io/project-zot/zot:v2.1.16`. Confirm these tags exist:
+1. **SDK install + version.** `requirements.txt`/`pyproject.toml` pin `agntcy-dir==1.0.0`
+   as a **placeholder**. Install and pin the real version:
+   ```bash
+   uv add agntcy-dir --index https://buf.build/gen/python
+   # or: pip install agntcy-dir --extra-index-url https://buf.build/gen/python
+   python -c "import agntcy.dir_sdk, importlib.metadata as m; print(m.version('agntcy-dir'))"
+   ```
+   Update the pin in `requirements.txt` and `pyproject.toml` to the printed version.
+2. **SDK method names / casing.** `DirectoryClient` calls `push`/`Push`, `pull`/`Pull`,
+   `delete`/`Delete` (resolved defensively) and reads the **structured** `RecordRef.cid`.
+   Confirm the real Python method names and the CID attribute:
+   ```bash
+   python - <<'PY'
+   from agntcy.dir_sdk.client import Client, Config
+   print([m for m in dir(Client) if not m.startswith('_')])
+   PY
+   ```
+3. **Record construction.** `_to_record()` builds `core_v1.Record` from the OASF JSON
+   via `google.protobuf.json_format.ParseDict`. Confirm the model module path
+   (`agntcy.dir_sdk.models.core_v1`) and that `ParseDict` accepts the OASF 1.0.0 fields.
+4. **Image tags.** Compose pins `ghcr.io/agntcy/dir-apiserver:1.16.0`,
+   `ghcr.io/agntcy/dir-reconciler:1.16.0`, `ghcr.io/project-zot/zot:v2.1.16`,
+   `docker.io/bitnami/postgresql:16`. Confirm they exist:
    ```bash
    docker pull ghcr.io/agntcy/dir-apiserver:1.16.0
    docker pull ghcr.io/agntcy/dir-reconciler:1.16.0
    docker pull ghcr.io/project-zot/zot:v2.1.16
    docker pull docker.io/bitnami/postgresql:16
    ```
-   If a tag is wrong, check the repo's releases / `ghcr.io/agntcy/dir` packages and
-   update the `image:` lines (keep them pinned — never `:latest`).
-2. **`dirctl push` CID output format.** `DirectoryClient._parse_cid` expects either
-   `Pushed record with CID <cid>` (human) or a JSON object with a `cid` field. Confirm
-   with a real run (below) and adjust the parser if the format differs.
-3. **`dirctl search` flags.** `discover()` calls a bare `dirctl search`; confirm the
-   real flag names if discovery is later wired into routing (it is not today).
-4. **`reconciler.env` keys.** The reconciler env here mirrors the apiserver store/db
-   settings; confirm against `agntcy/dir` `install/docker/reconciler.env`.
+5. **`server_address` wiring.** The gateway sets `AGNTCY_DIRECTORY_ADDR` (compose);
+   `DirectoryClient` passes it to `Config(server_address=...)` and also exports
+   `DIRECTORY_CLIENT_SERVER_ADDRESS`. Confirm the SDK honors one of these.
 
 ## Step 1 — bring up the directory stack + MIGA
 ```bash
-cp .env.example .env            # if not already present
+cp .env.example .env     # if not present
 docker compose up -d zot dir-postgres agntcy-directory dir-reconciler
-# wait for the apiserver to report healthy (grpc-health-probe):
 docker compose ps
-docker inspect --format '{{.State.Health.Status}}' $(docker compose ps -q agntcy-directory)
-# expect: healthy
+docker inspect --format '{{.State.Health.Status}}' "$(docker compose ps -q agntcy-directory)"
+# expect: healthy   (grpc-health-probe on :8888)
 docker compose up -d gateway
 ```
 
-## Step 2 — confirm dirctl can reach the directory
-```bash
-export DIRECTORY_CLIENT_SERVER_ADDRESS=127.0.0.1:8888   # from the host
-dirctl search || echo "search returned non-zero (note exit semantics)"
-```
-Expect a successful connection (empty result set is fine on a fresh directory).
-
-## Step 3 — publish an OASF record and capture its CID
-```bash
-dirctl push oasf/records/thousandeyes.record.json
-# expect output containing: Pushed record with CID <cid>
-CID=$(dirctl push oasf/records/infer.record.json | grep -oE '[A-Za-z0-9][A-Za-z0-9:_./-]{15,}' | tail -1)
-echo "CID=$CID"
-```
-Push every record:
-```bash
-for f in oasf/records/*.record.json; do echo "== $f =="; dirctl push "$f"; done
-```
-All nine should push without a validation error (records are OASF 1.0.0; the apiserver
-validates against `DIRECTORY_SERVER_OASF_API_VALIDATION_SCHEMA_URL`).
-
-## Step 4 — confirm stored + discoverable
-```bash
-dirctl pull "$CID"          # should return the same OASF JSON you pushed
-dirctl search               # should now list the pushed record(s)
-```
-
-## Step 5 — confirm MIGA publishes via the gateway
+## Step 2 — confirm the gateway publishes via the SDK (positive success)
 ```bash
 docker compose restart gateway
-docker compose logs gateway | grep -iE "published .* to AGNTCY Directory|standalone|CID"
+docker compose logs gateway | grep -iE "Published .* to AGNTCY Directory \(CID:|standalone"
 ```
-Expect "Published <name> to AGNTCY Directory (CID: ...)" lines (not "standalone").
+Expect "Published <name> to AGNTCY Directory (CID: <cid>)" for the registered servers
+— NOT "standalone". Capture one CID:
+```bash
+CID=$(docker compose logs gateway | grep -oE 'CID: [^)]+' | head -1 | awk '{print $2}')
+echo "CID=$CID"
+```
 
-## Step 6 — confirm the standalone fallback (routing must not depend on the directory)
+## Step 3 — confirm the record is retrievable (stored + discoverable)
+Optionally install `dirctl` on the host as a manual checker (not needed by MIGA):
+```bash
+brew tap agntcy/dir https://github.com/agntcy/dir/ && brew install dirctl
+export DIRECTORY_CLIENT_SERVER_ADDRESS=127.0.0.1:8888
+dirctl pull "$CID"     # should return the OASF record JSON you published
+dirctl search          # should list the published record(s)
+```
+Or verify in-process via the SDK:
+```bash
+python - <<PY
+import asyncio, os
+os.environ["AGNTCY_DIRECTORY_ADDR"]="127.0.0.1:8888"
+from miga_shared.agntcy import DirectoryClient
+async def main():
+    c=DirectoryClient()
+    rec=await c.pull("$CID")
+    print("pulled:", bool(rec), (rec or {}).get("schema_version"))
+asyncio.run(main())
+PY
+```
+
+## Step 4 — confirm the standalone fallback (routing must NOT depend on the directory)
 ```bash
 docker compose stop agntcy-directory zot dir-postgres dir-reconciler
 docker compose restart gateway
 docker compose logs gateway | grep -iE "standalone|Routing table loaded"
-# expect: directory publish reports standalone, AND the routing table still loads
-#         from config/server-registry.yaml (gateway healthy, tools available).
+# expect: publish reports standalone, AND the routing table still loads from
+#         config/server-registry.yaml (gateway healthy, tools available).
 ```
 
 ## Success criteria (all must hold)
+- [ ] `agntcy-dir` installs from the buf.build index; the pin is updated to the real version.
 - [ ] All four directory services come up; `agntcy-directory` health = `healthy`.
-- [ ] `dirctl push` of all 9 records succeeds with **no validation errors**.
-- [ ] `dirctl pull <CID>` returns the pushed record; `dirctl search` lists it.
-- [ ] Gateway logs show "Published … (CID: …)" (real publication, not `standalone`).
-- [ ] With the directory stopped, the gateway still loads its routing table from
-      `config/server-registry.yaml` and serves tools (standalone fallback intact).
-- [ ] The `dirctl push` CID output matched `_parse_cid` (or the parser was adjusted).
+- [ ] Gateway logs show "Published … (CID: …)" — real publication via the SDK, not `standalone`.
+- [ ] The published record is retrievable by CID (SDK `pull` or `dirctl pull`) and appears in search.
+- [ ] With the directory stopped, the gateway still loads routing from `config/server-registry.yaml`.
+- [ ] The SDK method names, `core_v1.Record` construction, and `RecordRef.cid` matched the client (or the client was adjusted to the confirmed API).
 
 **Only after these pass, flip the README AGNTCY claims from planned to implemented.**

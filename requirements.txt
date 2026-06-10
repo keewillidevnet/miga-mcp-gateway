@@ -23,6 +23,15 @@ aiohttp>=3.9.0
 # CLI
 click>=8.1.0
 
+# AGNTCY Directory Python SDK (agntcy.dir_sdk) — native gRPC client to dir-apiserver.
+# NOT on PyPI. Install from the buf.build generated-code index:
+#   uv add agntcy-dir --index https://buf.build/gen/python
+#   (pip: pip install agntcy-dir --extra-index-url https://buf.build/gen/python)
+# NOTE: 1.0.0 is a PLACEHOLDER pin — confirm the exact published version after
+# install (the build sandbox has no buf.build egress). See VERIFY_DIRECTORY.md.
+# dirctl is NOT required at runtime (SDK needs it only for signing, which MIGA omits).
+agntcy-dir==1.0.0
+
 # INFER Intelligence Engine (optional, for infer_mcp)
 # pandas>=2.1.0
 # scipy>=1.11.0
