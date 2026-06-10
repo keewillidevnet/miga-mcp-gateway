@@ -1,11 +1,17 @@
 """Tests for miga_shared models, formatters, AGNTCY, and error handling."""
+
 from __future__ import annotations
 
 import json
 from datetime import datetime, timedelta, timezone
 
-import pytest
-
+from miga_shared.agntcy import OASFRecord
+from miga_shared.errors import (
+    AuthenticationError,
+    MIGAError,
+    PlatformAPIError,
+    RateLimitError,
+)
 from miga_shared.models import (
     AuditLogEntry,
     CorrelatedEvent,
@@ -13,23 +19,14 @@ from miga_shared.models import (
     MIGARole,
     PlatformCapability,
     PlatformType,
-    SeverityLevel,
     ToolResponse,
 )
-from miga_shared.errors import (
-    ApprovalRequiredError,
-    AuthenticationError,
-    MIGAError,
-    PlatformAPIError,
-    RateLimitError,
-)
 from miga_shared.utils.formatters import Fmt
-from miga_shared.agntcy import OASFRecord
-
 
 # ---------------------------------------------------------------------------
 # Models
 # ---------------------------------------------------------------------------
+
 
 class TestMIGARole:
     def test_all_roles_defined(self):
@@ -180,6 +177,7 @@ class TestPlatformCapability:
 # Errors
 # ---------------------------------------------------------------------------
 
+
 class TestErrors:
     def test_miga_error_to_tool_error(self):
         err = MIGAError("Something failed", details="Check logs")
@@ -205,6 +203,7 @@ class TestErrors:
 # ---------------------------------------------------------------------------
 # Formatters
 # ---------------------------------------------------------------------------
+
 
 class TestFormatters:
     def test_severity_emoji(self):
@@ -234,6 +233,7 @@ class TestFormatters:
 # ---------------------------------------------------------------------------
 # AGNTCY OASF
 # ---------------------------------------------------------------------------
+
 
 class TestOASFRecord:
     def test_to_dict(self):
@@ -275,7 +275,14 @@ class TestOASFRecord:
             "modules": {
                 "mcp_server": {
                     "tools": [
-                        {"name": "xdr_get_incidents", "description": "Get incidents", "roles": ["security"], "read_only": True, "destructive": False, "requires_approval": False},
+                        {
+                            "name": "xdr_get_incidents",
+                            "description": "Get incidents",
+                            "roles": ["security"],
+                            "read_only": True,
+                            "destructive": False,
+                            "requires_approval": False,
+                        },
                     ]
                 }
             },

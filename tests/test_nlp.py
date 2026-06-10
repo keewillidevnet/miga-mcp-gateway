@@ -1,11 +1,11 @@
 """Tests for WebEx Bot NLP intent recognition."""
+
 from __future__ import annotations
 
 import pytest
 
 from packages.webex_bot.nlp import (
     IntentCategory,
-    ParsedIntent,
     format_help,
     recognize_intent,
 )
@@ -70,7 +70,10 @@ class TestIntentRecognition:
         assert intent.category == IntentCategory.OBSERVABILITY
         assert intent.platform == "infer"
 
-    @pytest.mark.xfail(reason="pre-existing webex_bot NLP behavior on main; bot is out of migration scope", strict=False)
+    @pytest.mark.xfail(
+        reason="pre-existing webex_bot NLP behavior on main; bot is out of migration scope",
+        strict=False,
+    )
     def test_anomaly_detection(self):
         intent = recognize_intent("any anomalous patterns?")
         assert intent.category == IntentCategory.OBSERVABILITY
@@ -81,7 +84,10 @@ class TestIntentRecognition:
         assert intent.category == IntentCategory.COMPLIANCE
         assert intent.platform == "infer"
 
-    @pytest.mark.xfail(reason="pre-existing webex_bot NLP behavior on main; bot is out of migration scope", strict=False)
+    @pytest.mark.xfail(
+        reason="pre-existing webex_bot NLP behavior on main; bot is out of migration scope",
+        strict=False,
+    )
     def test_predict_failures(self):
         intent = recognize_intent("predict any failures?")
         assert intent.category == IntentCategory.OBSERVABILITY
@@ -102,7 +108,10 @@ class TestIntentRecognition:
         intent = recognize_intent("show running configuration")
         assert intent.category == IntentCategory.CONFIGURATION
 
-    @pytest.mark.xfail(reason="pre-existing webex_bot NLP behavior on main; bot is out of migration scope", strict=False)
+    @pytest.mark.xfail(
+        reason="pre-existing webex_bot NLP behavior on main; bot is out of migration scope",
+        strict=False,
+    )
     def test_list_devices(self):
         intent = recognize_intent("list all devices")
         assert intent.category == IntentCategory.CONFIGURATION
@@ -153,7 +162,10 @@ class TestIntentRecognition:
         assert "critical" in intent.arguments["severity"]
 
     # -- Help text --
-    @pytest.mark.xfail(reason="pre-existing webex_bot NLP behavior on main; bot is out of migration scope", strict=False)
+    @pytest.mark.xfail(
+        reason="pre-existing webex_bot NLP behavior on main; bot is out of migration scope",
+        strict=False,
+    )
     def test_help_format(self):
         text = format_help()
         assert "MIGA" in text

@@ -184,12 +184,27 @@ followed upstream and updated `config/server-registry.yaml` (still valid against
   behaviors that fail identically on pristine `main` (verified); the bot is out of
   migration scope, so they are marked `xfail` rather than masked.
 
-## Pre-existing issues (not introduced here)
+## Lint / CI
 
-- Repo-wide `ruff check .` / `ruff format --check .` already fail on `main` (433
-  errors; 34 files unformatted). This migration *reduced* the count (to 198). All
-  files authored/edited in this migration are ruff-clean and formatted; the legacy
-  codebase was intentionally not reformatted to keep the diff scoped.
+`main` was not ruff-clean (433 lint errors; 34 files unformatted), so the CI
+**Lint & Type Check** job failed on `main` too. To get this branch green **without
+touching the do-not-touch internals**:
+
+- All migration code (`miga_shared/registry.py`, `miga_shared/transport.py`,
+  `packages/gateway/server.py`, `miga_shared/agntcy`, and the new tests) is fully
+  ruff-clean and formatted.
+- The pre-existing internals the brief marks do-not-touch (`servers/infer_mcp`,
+  `packages/webex_bot`, `packages/cli`, and the legacy `miga_shared` modules
+  `auth`, `clients`, `errors.py`, `models.py`, `server_base.py`, `utils`) are kept
+  **byte-identical to their prior state** and excluded from ruff via
+  `extend-exclude` in `pyproject.toml`. A dedicated lint-cleanup PR can remove these
+  exclusions later.
+- `UP017` (datetime.UTC) and `UP042` (StrEnum) are ignored repo-wide: both emit
+  Python-3.11-only / semantics-changing rewrites; the codebase keeps `timezone.utc`
+  and `(str, Enum)` intentionally.
+
+Result: `ruff check .` and `ruff format --check .` both pass; `pytest` is 115 passed,
+4 xfailed (pre-existing webex_bot NLP behavior, verified identical on `main`).
 
 ## License
 

@@ -1,12 +1,14 @@
 """AGNTCY integration — OASF records, Agent Directory, and Identity badges."""
+
 from __future__ import annotations
 
 import logging
 import os
 from dataclasses import dataclass, field
-from typing import Any, Optional
+from typing import Any
 
 import httpx
+
 from miga_shared.models import MIGARole, PlatformCapability, PlatformType
 
 logger = logging.getLogger("miga.agntcy")
@@ -16,13 +18,15 @@ logger = logging.getLogger("miga.agntcy")
 # OASF Record
 # ---------------------------------------------------------------------------
 
+
 @dataclass
 class OASFRecord:
     """Open Agent Schema Framework record — each MCP server publishes one."""
+
     name: str
     version: str = "1.0.0"
     description: str = ""
-    platform: Optional[PlatformType] = None
+    platform: PlatformType | None = None
     skills: list[str] = field(default_factory=list)
     domains: list[str] = field(default_factory=list)
     capabilities: list[PlatformCapability] = field(default_factory=list)
@@ -97,11 +101,14 @@ class OASFRecord:
 # Agent Directory Client
 # ---------------------------------------------------------------------------
 
+
 class DirectoryClient:
     """Client for the AGNTCY Agent Directory Service (ADS)."""
 
-    def __init__(self, url: Optional[str] = None):
-        self.url = (url or os.getenv("AGNTCY_DIRECTORY_URL", "http://agntcy-directory:8500")).rstrip("/")
+    def __init__(self, url: str | None = None):
+        self.url = (
+            url or os.getenv("AGNTCY_DIRECTORY_URL", "http://agntcy-directory:8500")
+        ).rstrip("/")
         self._http = httpx.AsyncClient(timeout=15.0)
 
     async def register(self, record: OASFRecord) -> str:
@@ -139,9 +146,9 @@ class DirectoryClient:
 
     async def discover(
         self,
-        skills: Optional[list[str]] = None,
-        roles: Optional[list[MIGARole]] = None,
-        platform: Optional[PlatformType] = None,
+        skills: list[str] | None = None,
+        roles: list[MIGARole] | None = None,
+        platform: PlatformType | None = None,
     ) -> list[OASFRecord]:
         params: dict[str, str] = {}
         if skills:
@@ -181,14 +188,16 @@ class DirectoryClient:
 # Identity Badge
 # ---------------------------------------------------------------------------
 
+
 @dataclass
 class IdentityBadge:
     """AGNTCY Identity badge — cryptographic server identity."""
+
     subject: str  # e.g. "miga/meraki_mcp"
     issuer: str = ""
     badge_type: str = "mcp_server"
-    public_key: Optional[str] = None
-    signature: Optional[str] = None
+    public_key: str | None = None
+    signature: str | None = None
     claims: dict[str, Any] = field(default_factory=dict)
 
     def __post_init__(self):
@@ -201,4 +210,9 @@ class IdentityBadge:
         return bool(self.signature and self.public_key)
 
     def to_dict(self) -> dict[str, Any]:
-        return {"subject": self.subject, "issuer": self.issuer, "badge_type": self.badge_type, "claims": self.claims}
+        return {
+            "subject": self.subject,
+            "issuer": self.issuer,
+            "badge_type": self.badge_type,
+            "claims": self.claims,
+        }

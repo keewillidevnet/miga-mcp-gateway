@@ -32,8 +32,27 @@ include = ["miga_shared*", "packages*", "servers*"]
 [tool.ruff]
 target-version = "py311"
 line-length = 100
+# This migration lints/formats only the code it introduces or modifies. The files
+# below are pre-existing internals the migration brief marks as do-not-touch; they
+# are kept byte-identical to their prior state and excluded from ruff here (a
+# dedicated lint-cleanup PR can remove these exclusions). See MIGRATION.md.
+extend-exclude = [
+    "servers/infer_mcp",
+    "packages/webex_bot",
+    "packages/cli",
+    "miga_shared/auth",
+    "miga_shared/clients",
+    "miga_shared/errors.py",
+    "miga_shared/models.py",
+    "miga_shared/server_base.py",
+    "miga_shared/utils",
+]
 [tool.ruff.lint]
 select = ["E", "F", "I", "N", "W", "UP", "B", "SIM"]
+# Intentionally kept: timezone.utc (broad runtime compatibility) and (str, Enum)
+# mixins (stable str serialization relied on across services and tests).
+ignore = ["UP017", "UP042"]
+
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
