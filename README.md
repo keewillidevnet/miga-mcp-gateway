@@ -243,40 +243,27 @@ NetBox maps the relationships: 3 downstream access switches serving **240 users*
 
 ## AGNTCY Integration
 
-MIGA is built to **align with** Cisco's [AGNTCY](https://agntcy.org) Internet of
-Agents framework (Linux Foundation). Honest status of each piece:
+MIGA is built to **align with** Cisco's [AGNTCY](https://agntcy.org) Internet of Agents
+framework (Linux Foundation). Honest status of each capability:
 
-- **OASF — implemented (verified live).** Each registered server has an authored OASF
-  capability record under `oasf/records/*.record.json` (all nine validate against the
-  canonical OASF **1.0.0** schema server with **0 errors / 0 warnings**). At startup the
-  gateway publishes all **9/9** records to a real AGNTCY Directory (`dir-apiserver`, via
-  the `agntcy-dir` 1.3.0 SDK), each returning a content-addressed **CID**, and records
-  **pull back by CID** at `schema_version` 1.0.0 — confirmed on a networked Docker host
-  (see `VERIFY_DIRECTORY.md`).
-- **Directory publication — implemented (verified live); discovery-based routing — planned.**
-  The gateway publishes OASF records to the real AGNTCY **Agent Directory** via the
-  `agntcy-dir` Python SDK (native gRPC; no `dirctl` at runtime); publication is
-  best-effort and falls back to standalone if the directory is unreachable. **Routing is
-  driven entirely by `config/server-registry.yaml`** (loaded at startup + periodically
-  reloaded), so adding a server is picked up with no code change. Using the directory's
-  *search/discovery* to drive routing is **planned** — routing does not yet depend on
-  the directory.
-- **Identity (Agent Badges) — planned.** A scaffolding `IdentityBadge` type exists,
-  but it performs no cryptographic signing or verification yet (`verify()` only
-  checks for field presence). Treat verifiable agent identity as planned, not built.
-- **SLIM — planned (v2).** Inter-service messaging currently uses Redis pub/sub;
-  quantum-safe AGNTCY SLIM is a future item.
-- **Observability — planned (v2).** No OpenTelemetry tracing is wired today.
+| Capability | Status | Detail |
+|------------|--------|--------|
+| OASF capability records | ✅ **Implemented** (verified live) | One record per server under `oasf/records/*.record.json`; all 9 validate against the OASF **1.0.0** schema server (0 errors / 0 warnings). |
+| Directory publication | ✅ **Implemented** (verified live) | At startup the gateway publishes **9/9** records to a real AGNTCY Directory (`dir-apiserver`) via the **`agntcy-dir` 1.3.0 SDK** — each returns a content-addressed **CID**; records **pull back by CID** at `schema_version` 1.0.0. Best-effort: falls back to standalone if the directory is down. |
+| Registry-driven routing | ✅ **Implemented** | Routing comes entirely from `config/server-registry.yaml` (loaded at startup + periodically reloaded); add a server and it's picked up with no code change. |
+| Directory-search routing discovery | 🔲 **Planned** | Routing does **not** depend on the directory; using the directory's search to drive routing is not yet wired. |
+| Identity / Agent Badges | 🔲 **Planned** | `IdentityBadge` is a scaffold only — no cryptographic signing or verification. |
+| SLIM (v2) messaging | 🔲 **Planned** | Inter-service messaging is Redis pub/sub today; quantum-safe AGNTCY SLIM is future. |
+| Observability (v2) | 🔲 **Planned** | No OpenTelemetry tracing wired. |
 
-> **Verified live:** on a networked Docker host the gateway loaded 9 specs and published
-> **9/9** OASF capability records to a real AGNTCY Directory (`dir-apiserver` + `zot` +
-> `postgres` + `reconciler`) via the `agntcy-dir` 1.3.0 SDK, each returning a CID, with
-> a pull-by-CID round-trip at `schema_version` 1.0.0 (see `VERIFY_DIRECTORY.md`). Still
-> **planned**: cryptographic Agent Badges, SLIM (v2), OpenTelemetry (v2), and
-> directory-search-based routing discovery.
+> **Verified live** (networked Docker host): gateway loaded 9 specs → published 9/9 OASF
+> records to `dir-apiserver` + `zot` + `postgres` + `reconciler` (agntcy-dir 1.3.0 SDK),
+> each returning a CID, with a pull-by-CID round-trip at `schema_version` 1.0.0. See
+> `VERIFY_DIRECTORY.md`.
 
 **What is real and load-bearing:** a registry-driven gateway fronting 8 real external
-MCP servers plus INFER, with a validated OASF 1.0.0 capability record per server.
+MCP servers plus INFER, with a validated OASF 1.0.0 capability record per server — now
+also published to a real AGNTCY Directory.
 
 ## Deployment
 
