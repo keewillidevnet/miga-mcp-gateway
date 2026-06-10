@@ -6,6 +6,9 @@
 [![Servers](https://img.shields.io/badge/Registered%20Servers-9-red.svg)](#platform-coverage)
 [![Code Style](https://img.shields.io/badge/code%20style-ruff-000000.svg)](https://github.com/astral-sh/ruff)
 [![Cisco Code Exchange](https://img.shields.io/badge/Cisco-Code%20Exchange-00bceb.svg)](https://developer.cisco.com/codeexchange/)
+[![published](https://static.production.devnetcloud.com/codeexchange/assets/images/devnet-published.svg)](https://developer.cisco.com/codeexchange/github/repo/keewillidevnet/miga-mcp-gateway)
+[![Run in Cisco Cloud IDE](https://static.production.devnetcloud.com/codeexchange/assets/images/devnet-runable-icon.svg)](https://developer.cisco.com/codeexchange/devenv/keewillidevnet/miga-mcp-gateway/)
+[![Cisco Developed](https://static.production.devnetcloud.com/codeexchange/assets/images/cisco-developed.svg)](https://developer.cisco.com/codeexchange/github/repo/keewillidevnet/miga-mcp-gateway)
 
 
 
