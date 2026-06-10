@@ -1,0 +1,69 @@
+# Role -> OASF skill names, used by directory-search discovery routing.
+#
+# When MIGA_DISCOVERY_ROUTING is enabled, the gateway resolves a role's servers by
+# searching the AGNTCY Directory for these skill names, mapping the matched OASF
+# records back to registry servers via each record's annotations.miga_registry_ref.
+# The static config/server-registry.yaml remains the default and the guaranteed
+# fallback; this file only affects discovery-augmented routing.
+#
+# Skill names are the full hierarchical OASF paths used in oasf/records/*.record.json
+# (OASF 1.0.0). This map was derived from the skills each record declares, grouped by
+# the roles its server serves in config/server-registry.yaml. Keep it in sync if you
+# change a record's skills or a server's roles.
+# Validated on load against config/role-skills.schema.json.
+
+observability:
+  - advanced_reasoning_planning/hypothesis_generation
+  - devops_mlops/monitoring_alerting
+  - evaluation_monitoring/anomaly_detection
+  - evaluation_monitoring/performance_monitoring
+  - governance_compliance/risk_classification
+  - natural_language_processing/analytical_reasoning
+  - natural_language_processing/information_retrieval_synthesis/information_retrieval_synthesis_search
+  - retrieval_augmented_generation/retrieval_of_information
+  - security_privacy/threat_detection
+  - tool_interaction/tool_use_planning
+  - tool_interaction/workflow_automation
+
+security:
+  - advanced_reasoning_planning/hypothesis_generation
+  - devops_mlops/monitoring_alerting
+  - evaluation_monitoring/anomaly_detection
+  - evaluation_monitoring/performance_monitoring
+  - governance_compliance/risk_classification
+  - natural_language_processing/analytical_reasoning
+  - natural_language_processing/information_retrieval_synthesis/information_retrieval_synthesis_search
+  - retrieval_augmented_generation/retrieval_of_information
+  - security_privacy/threat_detection
+
+automation:
+  - evaluation_monitoring/performance_monitoring
+  - retrieval_augmented_generation/retrieval_of_information
+  - tool_interaction/api_schema_understanding
+  - tool_interaction/tool_use_planning
+  - tool_interaction/workflow_automation
+
+configuration:
+  - evaluation_monitoring/performance_monitoring
+  - natural_language_processing/information_retrieval_synthesis/fact_extraction
+  - retrieval_augmented_generation/document_or_database_question_answering
+  - retrieval_augmented_generation/retrieval_of_information
+  - security_privacy/threat_detection
+  - tool_interaction/api_schema_understanding
+  - tool_interaction/workflow_automation
+
+compliance:
+  - advanced_reasoning_planning/hypothesis_generation
+  - evaluation_monitoring/anomaly_detection
+  - evaluation_monitoring/performance_monitoring
+  - governance_compliance/audit_trail_summarization
+  - governance_compliance/risk_classification
+  - natural_language_processing/analytical_reasoning
+  - natural_language_processing/information_retrieval_synthesis/fact_extraction
+  - retrieval_augmented_generation/document_or_database_question_answering
+  - retrieval_augmented_generation/retrieval_of_information
+
+identity:
+  - governance_compliance/audit_trail_summarization
+  - governance_compliance/risk_classification
+  - retrieval_augmented_generation/retrieval_of_information

@@ -265,18 +265,84 @@ class DirectoryClient:
             )
             return None
 
+    def _search_sync(
+        self, client: Any, skills: list[str], limit: int
+    ) -> list[tuple[str | None, dict | None]]:
+        """Run the SDK ``search_records`` synchronously (called via asyncio.to_thread).
+
+        Returns a list of ``(cid, record_dict_or_None)``. When a result already carries
+        the record payload it is decoded here; otherwise only the CID is returned and
+        the async caller pulls it. Any wrong field shape raises and is caught by the
+        caller, which returns [] (best-effort).
+
+        TODO: CONFIRM SearchRecordsRequest / RecordQuery fields against agntcy-dir 1.3.0
+        via introspection on the Mac (see DISCOVERY_VERIFY.md) before relying on this.
+        Until confirmed, search may raise here and routing falls back to static.
+        """
+        from agntcy.dir_sdk.models import search_v1  # TODO confirm module/type names
+
+        # One query per skill name. AGNTCY search matches records by skill.
+        queries = [
+            search_v1.RecordQuery(
+                type=search_v1.RecordQueryType.RECORD_QUERY_TYPE_SKILL,  # TODO confirm enum
+                value=name,
+            )
+            for name in skills
+        ]
+        req = search_v1.SearchRecordsRequest(queries=queries, limit=limit)  # TODO confirm fields
+
+        results = client.search_records(req)
+
+        out: list[tuple[str | None, dict | None]] = []
+        for item in results:
+            cid = getattr(item, "cid", None)
+            data = getattr(item, "data", None)
+            rec = MessageToDict(data) if data is not None else None
+            if rec is None:
+                inner = getattr(item, "record", None)
+                if inner is not None:
+                    idata = getattr(inner, "data", None)
+                    if idata is not None:
+                        rec = MessageToDict(idata)
+                    cid = cid or getattr(inner, "cid", None)
+            out.append((cid, rec))
+            if len(out) >= limit:
+                break
+        return out
+
     async def discover(
-        self,
-        skills: list[str] | None = None,
-        roles: list[MIGARole] | None = None,
-        platform: PlatformType | None = None,
-    ) -> list[OASFRecord]:
-        """Best-effort discovery. The real method is
-        ``search_records(SearchRecordsRequest)``, but discovery is **not** on the
-        routing path (the gateway routes from ``config/server-registry.yaml``), so the
-        request-proto builder is **intentionally not implemented** here. Returns ``[]``
-        — not faked. Wiring search into routing is a deliberate future step."""
-        return []
+        self, skills: list[str] | None = None, limit: int = 50
+    ) -> list[dict[str, Any]]:
+        """Best-effort directory search by OASF skill name.
+
+        Returns a list of ``{"cid", "record", "registry_ref"}`` dicts, where
+        ``registry_ref`` is the record's ``annotations.miga_registry_ref`` (the registry
+        server holding connection details). On any failure, missing SDK, or empty result
+        it returns ``[]`` and never raises, so routing falls back to the static registry.
+        """
+        if not _SDK_AVAILABLE or not skills:
+            return []
+        client = self._sdk()
+        if client is None:
+            return []
+        try:
+            raw = await asyncio.wait_for(
+                asyncio.to_thread(self._search_sync, client, list(skills), limit),
+                timeout=self.timeout,
+            )
+        except Exception as exc:  # noqa: BLE001 - best-effort
+            logger.warning("directory search failed: %r (%s)", exc, self._classify(exc))
+            return []
+
+        out: list[dict[str, Any]] = []
+        for cid, rec in raw[:limit]:
+            if rec is None and cid:
+                rec = await self.pull(cid)
+            if rec is None:
+                continue
+            ref = (rec.get("annotations") or {}).get("miga_registry_ref")
+            out.append({"cid": cid, "record": rec, "registry_ref": ref})
+        return out
 
     async def deregister(self, cid: str) -> bool:
         if not _SDK_AVAILABLE:
