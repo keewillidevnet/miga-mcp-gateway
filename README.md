@@ -2,7 +2,7 @@
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/python-3.11+-green.svg)](https://python.org)
 [![MCP](https://img.shields.io/badge/MCP-Streamable%20HTTP%20%2B%20stdio-purple.svg)](https://modelcontextprotocol.io)
-[![AGNTCY](https://img.shields.io/badge/AGNTCY-Native-orange.svg)](https://agntcy.org)
+[![AGNTCY](https://img.shields.io/badge/AGNTCY-aligned-orange.svg)](https://agntcy.org)
 [![Servers](https://img.shields.io/badge/Registered%20Servers-9-red.svg)](#platform-coverage)
 [![Code Style](https://img.shields.io/badge/code%20style-ruff-000000.svg)](https://github.com/astral-sh/ruff)
 [![Cisco Code Exchange](https://img.shields.io/badge/Cisco-Code%20Exchange-00bceb.svg)](https://developer.cisco.com/codeexchange/)
@@ -44,7 +44,7 @@ and risk scoring across platforms.
 ┌────────────────────────────────────────────────────────────────────────────┐
 │                             WebEx Bot (Python)                             │
 │             NLP Intent -> MCP Client -> Adaptive Cards -> HITL             │
-│                          [AGNTCY Identity Badge]                           │
+│                     [AGNTCY Identity Badge — planned]                      │
 └────────────────────────────────────────────────────────────────────────────┘
                                        │                                      
                                        │ JSON-RPC 2.0 (MCP)
@@ -52,7 +52,7 @@ and risk scoring across platforms.
 ┌────────────────────────────────────────────────────────────────────────────┐
 │                        Gateway MCP Server (Python)                         │
 │           Registry-driven routing  (config/server-registry.yaml)           │
-│                 AGNTCY Directory + OASF capability lookup                  │
+│              OASF records · AGNTCY Directory publish: planned              │
 │               6 Roles: Observability | Security | Automation               │
 │                   Configuration | Compliance | Identity                    │
 │        MCP CLIENT transports: HTTP/SSE URLs + stdio (docker run -i)        │
@@ -71,8 +71,9 @@ and risk scoring across platforms.
 │  local·stdio   │  │  local·stdio   │  │  compose·http  │  │  compose·http  │
 └────────────────┘  └────────────────┘  └────────────────┘  └────────────────┘
 
-All 8 servers + INFER publish OASF records to the AGNTCY Directory
-(dynamic discovery). INFER consumes their normalized output:
+All 8 servers + INFER have authored OASF records (validated against OASF 1.0.0).
+Discovery today is registry-driven; live AGNTCY Directory publication is planned.
+INFER consumes their normalized output:
 
 ┌────────────────────────────────────────────────────────────────────────────┐
 │                   INFER — Fusion Engine (MIGA-original)                    │
@@ -241,17 +242,31 @@ NetBox maps the relationships: 3 downstream access switches serving **240 users*
 
 ## AGNTCY Integration
 
-MIGA uses Cisco's [AGNTCY](https://agntcy.org) Internet of Agents framework
-(Linux Foundation):
+MIGA is built to **align with** Cisco's [AGNTCY](https://agntcy.org) Internet of
+Agents framework (Linux Foundation). Honest status of each piece:
 
-- **OASF**: Each registered server publishes a structured capability record
-  (`oasf/records/*.record.json`) built against the OASF schema. The gateway
-  publishes these to the AGNTCY Directory at startup.
-- **Agent Directory**: Dynamic discovery — register a new server in the registry,
-  add its OASF record, and the gateway finds and routes to it.
-- **Identity**: Cryptographically verifiable server identities via Agent Badges.
-- **SLIM** (v2): Quantum-safe inter-service messaging.
-- **Observability** (v2): OpenTelemetry distributed tracing.
+- **OASF — implemented (records) / planned (live publication).** Each registered
+  server has an authored OASF capability record under `oasf/records/*.record.json`,
+  and all nine validate against the canonical OASF **1.0.0** schema server with
+  **0 errors / 0 warnings**. The gateway contains best-effort code to publish these
+  to an AGNTCY Directory at startup, but they are **not currently published to a live
+  directory** (see Agent Directory below and MIGRATION.md).
+- **Discovery — implemented (registry) / planned (Agent Directory).** Routing is
+  driven entirely by `config/server-registry.yaml`: the gateway loads it at startup
+  and reloads it periodically, so adding a server (a registry entry + an OASF record)
+  is picked up with no code changes. Discovery via the AGNTCY **Agent Directory**
+  product is **not yet wired** — MIGA's `DirectoryClient` speaks a simplified REST
+  `/v1/records` API that does not match the real directory (gRPC `dir-apiserver` +
+  OCI registry + postgres); `register` is best-effort and falls back to standalone.
+- **Identity (Agent Badges) — planned.** A scaffolding `IdentityBadge` type exists,
+  but it performs no cryptographic signing or verification yet (`verify()` only
+  checks for field presence). Treat verifiable agent identity as planned, not built.
+- **SLIM — planned (v2).** Inter-service messaging currently uses Redis pub/sub;
+  quantum-safe AGNTCY SLIM is a future item.
+- **Observability — planned (v2).** No OpenTelemetry tracing is wired today.
+
+**What is real and load-bearing:** a registry-driven gateway fronting 8 real external
+MCP servers plus INFER, with a validated OASF 1.0.0 capability record per server.
 
 ## Deployment
 
