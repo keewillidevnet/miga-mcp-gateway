@@ -2,7 +2,7 @@
   "name": "NetBox MCP Server",
   "description": "Read-only access to NetBox source-of-truth infrastructure data: devices, sites, racks, IPAM, circuits, virtualization, and change history for impact analysis and inventory context.",
   "version": "1.0.0",
-  "schema_version": "1.0.4",
+  "schema_version": "1.0.0",
   "authors": [
     "Keenan Williams"
   ],
@@ -12,25 +12,25 @@
   },
   "skills": [
     {
-      "name": "retrieval_of_information",
+      "name": "retrieval_augmented_generation/retrieval_of_information",
       "id": 601
     },
     {
-      "name": "fact_extraction",
+      "name": "natural_language_processing/information_retrieval_synthesis/fact_extraction",
       "id": 10301
     },
     {
-      "name": "document_or_database_question_answering",
+      "name": "retrieval_augmented_generation/document_or_database_question_answering",
       "id": 602
     }
   ],
   "domains": [
     {
-      "name": "network_architecture",
+      "name": "technology/networking/network_architecture",
       "id": 10304
     },
     {
-      "name": "network_management",
+      "name": "technology/networking/network_management",
       "id": 10302
     }
   ],

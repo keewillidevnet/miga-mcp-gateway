@@ -2,7 +2,7 @@
   "name": "INFER MCP Server",
   "description": "INFER cross-platform intelligence engine: event correlation, root cause analysis, anomaly detection, predictive failure analysis, and network-wide risk scoring over normalized telemetry from the registered servers.",
   "version": "1.0.0",
-  "schema_version": "1.0.4",
+  "schema_version": "1.0.0",
   "authors": [
     "Keenan Williams"
   ],
@@ -12,37 +12,37 @@
   },
   "skills": [
     {
-      "name": "anomaly_detection",
+      "name": "evaluation_monitoring/anomaly_detection",
       "id": 1104
     },
     {
-      "name": "analytical_reasoning",
+      "name": "natural_language_processing/analytical_reasoning",
       "id": 107
     },
     {
-      "name": "hypothesis_generation",
+      "name": "advanced_reasoning_planning/hypothesis_generation",
       "id": 1504
     },
     {
-      "name": "risk_classification",
+      "name": "governance_compliance/risk_classification",
       "id": 1304
     },
     {
-      "name": "performance_monitoring",
+      "name": "evaluation_monitoring/performance_monitoring",
       "id": 1105
     }
   ],
   "domains": [
     {
-      "name": "network_operations",
+      "name": "technology/networking/network_operations",
       "id": 10301
     },
     {
-      "name": "cybersecurity",
+      "name": "technology/security/cybersecurity",
       "id": 10701
     },
     {
-      "name": "incident_management",
+      "name": "technology/security/incident_management",
       "id": 10706
     }
   ],

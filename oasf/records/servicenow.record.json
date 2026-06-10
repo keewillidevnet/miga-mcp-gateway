@@ -2,7 +2,7 @@
   "name": "ServiceNow ITSM MCP Server",
   "description": "ServiceNow ITSM and workflow operations: incidents, changes, catalog, and knowledge for closed-loop incident management and automation across the network estate.",
   "version": "1.0.0",
-  "schema_version": "1.0.4",
+  "schema_version": "1.0.0",
   "authors": [
     "Keenan Williams"
   ],
@@ -12,25 +12,25 @@
   },
   "skills": [
     {
-      "name": "workflow_automation",
+      "name": "tool_interaction/workflow_automation",
       "id": 1402
     },
     {
-      "name": "retrieval_of_information",
+      "name": "retrieval_augmented_generation/retrieval_of_information",
       "id": 601
     },
     {
-      "name": "tool_use_planning",
+      "name": "tool_interaction/tool_use_planning",
       "id": 1403
     }
   ],
   "domains": [
     {
-      "name": "incident_management",
+      "name": "technology/security/incident_management",
       "id": 10706
     },
     {
-      "name": "workflow_automation",
+      "name": "technology/process_automation/workflow_automation",
       "id": 11002
     }
   ],

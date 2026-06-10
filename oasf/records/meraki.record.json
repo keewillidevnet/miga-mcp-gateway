@@ -2,7 +2,7 @@
   "name": "Cisco Meraki MCP Server",
   "description": "Cisco Meraki Dashboard cloud-managed analytics and configuration: organization health, device status, clients, switch ports, VPN status, and security appliance events.",
   "version": "1.0.0",
-  "schema_version": "1.0.4",
+  "schema_version": "1.0.0",
   "authors": [
     "Keenan Williams"
   ],
@@ -12,29 +12,29 @@
   },
   "skills": [
     {
-      "name": "performance_monitoring",
+      "name": "evaluation_monitoring/performance_monitoring",
       "id": 1105
     },
     {
-      "name": "retrieval_of_information",
+      "name": "retrieval_augmented_generation/retrieval_of_information",
       "id": 601
     },
     {
-      "name": "threat_detection",
+      "name": "security_privacy/threat_detection",
       "id": 801
     }
   ],
   "domains": [
     {
-      "name": "network_operations",
+      "name": "technology/networking/network_operations",
       "id": 10301
     },
     {
-      "name": "wireless_communication",
+      "name": "technology/communication_systems/wireless_communication",
       "id": 10802
     },
     {
-      "name": "network_security",
+      "name": "technology/networking/network_security",
       "id": 10305
     }
   ],

@@ -2,7 +2,7 @@
   "name": "Cisco ThousandEyes MCP Server",
   "description": "Queries ThousandEyes v7 network and application assurance data: tests, agents, alerts, dashboards, and test results across network, page-load, web-transaction, and path-visualization tests.",
   "version": "1.0.0",
-  "schema_version": "1.0.4",
+  "schema_version": "1.0.0",
   "authors": [
     "Keenan Williams"
   ],
@@ -12,25 +12,25 @@
   },
   "skills": [
     {
-      "name": "performance_monitoring",
+      "name": "evaluation_monitoring/performance_monitoring",
       "id": 1105
     },
     {
-      "name": "anomaly_detection",
+      "name": "evaluation_monitoring/anomaly_detection",
       "id": 1104
     },
     {
-      "name": "monitoring_alerting",
+      "name": "devops_mlops/monitoring_alerting",
       "id": 1205
     }
   ],
   "domains": [
     {
-      "name": "network_operations",
+      "name": "technology/networking/network_operations",
       "id": 10301
     },
     {
-      "name": "network_management",
+      "name": "technology/networking/network_management",
       "id": 10302
     }
   ],

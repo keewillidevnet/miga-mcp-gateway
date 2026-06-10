@@ -228,3 +228,17 @@ ruff format --check . -> all formatted
   ```
   Given the Compose Spec schema and interpolation already pass, this is expected to be
   a clean exit; it is the only remaining piece of D10.
+
+## Gate closure (operator Mac, networked + Docker)
+Both pre-publish gates executed and passed against live infrastructure.
+
+Gate 1 (live OASF validate_object, C9): PASS. Server reports server_version 1.0.4 /
+schema_version 1.0.0. Records corrected to schema_version 1.0.0 with full
+hierarchical skill/domain names (ids unchanged, resolved by uid from the live
+/api/skills and /api/domains catalogs). All 9 records return error_count 0,
+warning_count 0.
+
+Gate 2 (docker compose config, D10): PASS. `docker compose config --quiet` exit 0
+on Docker 28.3.2 / Compose v2.38.2.
+
+Verdict: GO for production. No pending gates.
