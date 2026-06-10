@@ -1,4 +1,5 @@
 """Tests for WebEx Bot Adaptive Card templates."""
+
 from __future__ import annotations
 
 from packages.webex_bot.cards import (

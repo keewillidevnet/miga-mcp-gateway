@@ -2,16 +2,22 @@
 
 The Gateway is itself an MCP server that exposes 6 role-based meta-tools
 (Observability, Security, Automation, Configuration, Compliance, Identity).
-Each meta-tool fans out to relevant platform servers discovered via AGNTCY
-Directory OASF records, aggregates results, and returns unified responses.
+Each meta-tool fans out to the relevant **real, external** platform MCP servers
+and to MIGA's own INFER fusion engine, aggregates results, and returns unified
+responses.
 
-Architecture:
-- FastMCP server (Python) exposing meta-tools to the WebEx Bot / external clients
-- Queries AGNTCY Directory at startup to build dynamic routing table
-- Periodically refreshes capability map (no hardcoded routing)
-- Redis pub/sub for event-driven updates
-- Entra ID JWT authentication + AGNTCY Identity badge verification
+Architecture (post real-server migration):
+- FastMCP server exposing meta-tools to the WebEx Bot / external clients.
+- Connections are driven entirely by ``config/server-registry.yaml`` (no hardcoded
+  endpoints). Each entry declares how to reach a published upstream MCP server.
+- The gateway talks to every downstream server as an MCP **client** via the
+  transport abstraction (``miga_shared.transport``): remote HTTP/SSE URLs and local
+  stdio subprocesses (including the ``docker run -i`` pattern).
+- At startup the gateway publishes each server's OASF capability record to the
+  AGNTCY Directory so dynamic discovery keeps working, then periodically refreshes.
+- INFER consumes the normalized output of whatever servers are registered.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -20,156 +26,96 @@ import logging
 import os
 import time
 from contextlib import asynccontextmanager
-from typing import Any, Optional
+from pathlib import Path
+from typing import Any
 
-import httpx
 from mcp.server.fastmcp import FastMCP
 from pydantic import BaseModel, ConfigDict, Field
 
-from miga_shared.agntcy import DirectoryClient, IdentityBadge, OASFRecord
-from miga_shared.models import (
-    AuditLogEntry,
-    HealthStatus,
-    MIGARole,
-    PlatformCapability,
-    PlatformType,
-)
+from miga_shared.agntcy import DirectoryClient, IdentityBadge
+from miga_shared.models import MIGARole
+from miga_shared.registry import ServerSpec, load_registry
+from miga_shared.transport import MCPClientPool, MCPTransportError
 from miga_shared.utils.redis_bus import RedisPubSub
 
 logger = logging.getLogger("miga.gateway")
 
-# ---------------------------------------------------------------------------
-# Routing Table — built dynamically from AGNTCY Directory
-# ---------------------------------------------------------------------------
+_REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 
-class RoutingEntry:
-    """Maps a tool to its platform server endpoint."""
-    def __init__(self, tool_name: str, endpoint: str, platform: PlatformType, roles: list[MIGARole], read_only: bool, requires_approval: bool):
-        self.tool_name = tool_name
-        self.endpoint = endpoint
-        self.platform = platform
-        self.roles = roles
-        self.read_only = read_only
-        self.requires_approval = requires_approval
+# Tool-name fragments that are safe, read-only "summary" calls to fan out with no
+# arguments during a role sweep.
+_SUMMARY_HINTS = ("health", "overview", "status", "summary", "list")
+
+
+# ---------------------------------------------------------------------------
+# Routing Table — built from the config registry (no hardcoded endpoints)
+# ---------------------------------------------------------------------------
 
 
 class RoutingTable:
-    """Dynamic routing table built from AGNTCY OASF records."""
+    """Maps roles to the registered downstream servers that serve them.
 
-    def __init__(self):
-        self._by_tool: dict[str, RoutingEntry] = {}
-        self._by_role: dict[MIGARole, list[RoutingEntry]] = {r: [] for r in MIGARole}
-        self._by_platform: dict[PlatformType, list[RoutingEntry]] = {}
-        self._endpoints: dict[str, str] = {}  # name → endpoint URL
-        self._last_refresh: float = 0
+    Connection details live on each :class:`ServerSpec`; the gateway resolves a
+    role to a set of servers and uses the transport pool to reach them.
+    """
 
-    def load_from_oasf(self, records: list[OASFRecord]) -> None:
-        """Rebuild routing table from OASF records."""
-        self._by_tool.clear()
+    def __init__(self) -> None:
+        self._by_name: dict[str, ServerSpec] = {}
+        self._by_role: dict[MIGARole, list[ServerSpec]] = {r: [] for r in MIGARole}
+        self._last_refresh: float = 0.0
+
+    def load_from_registry(self, specs: list[ServerSpec]) -> None:
+        self._by_name = {s.name: s for s in specs}
         self._by_role = {r: [] for r in MIGARole}
-        self._by_platform.clear()
-        self._endpoints.clear()
-
-        for record in records:
-            self._endpoints[record.name] = record.endpoint
-            for cap in record.capabilities:
-                entry = RoutingEntry(
-                    tool_name=cap.tool_name,
-                    endpoint=record.endpoint,
-                    platform=cap.platform,
-                    roles=cap.roles,
-                    read_only=cap.read_only,
-                    requires_approval=cap.requires_approval,
-                )
-                self._by_tool[cap.tool_name] = entry
-                for role in cap.roles:
-                    self._by_role[role].append(entry)
-                self._by_platform.setdefault(cap.platform, []).append(entry)
-
+        for spec in specs:
+            for role in spec.roles:
+                try:
+                    self._by_role[MIGARole(role)].append(spec)
+                except ValueError:
+                    logger.warning("Server %s declares unknown role %r", spec.name, role)
         self._last_refresh = time.time()
         logger.info(
-            "Routing table loaded: %d tools across %d servers",
-            len(self._by_tool), len(self._endpoints),
+            "Routing table loaded from registry: %d servers across %d roles",
+            len(self._by_name),
+            sum(1 for v in self._by_role.values() if v),
         )
 
-    def tools_for_role(self, role: MIGARole) -> list[RoutingEntry]:
-        return self._by_role.get(role, [])
+    def servers_for_role(self, role: MIGARole) -> list[ServerSpec]:
+        return list(self._by_role.get(role, []))
 
-    def tools_for_platform(self, platform: PlatformType) -> list[RoutingEntry]:
-        return self._by_platform.get(platform, [])
+    def get(self, name: str) -> ServerSpec | None:
+        return self._by_name.get(name)
 
-    def get_tool(self, name: str) -> Optional[RoutingEntry]:
-        return self._by_tool.get(name)
-
-    def all_endpoints(self) -> dict[str, str]:
-        return dict(self._endpoints)
+    def all(self) -> dict[str, ServerSpec]:
+        return dict(self._by_name)
 
 
 # ---------------------------------------------------------------------------
-# Static fallback OASF records (used when AGNTCY Directory is unavailable)
+# AGNTCY directory publishing of OASF capability records
 # ---------------------------------------------------------------------------
 
-def _build_static_records() -> list[OASFRecord]:
-    """Fallback: build routing from env-configured endpoints."""
-    servers = [
-        ("catalyst_center_mcp", PlatformType.CATALYST_CENTER, "8001"),
-        ("meraki_mcp", PlatformType.MERAKI, "8002"),
-        ("thousandeyes_mcp", PlatformType.THOUSANDEYES, "8003"),
-        ("webex_mcp", PlatformType.WEBEX, "8004"),
-        ("xdr_mcp", PlatformType.XDR, "8005"),
-        ("security_cloud_control_mcp", PlatformType.SECURITY_CLOUD_CONTROL, "8006"),
-        ("infer_mcp", PlatformType.INFER, "8007"),
-        ("appdynamics_mcp", PlatformType.APPDYNAMICS, "8008"),
-        ("nexus_dashboard_mcp", PlatformType.NEXUS_DASHBOARD, "8009"),
-        ("sdwan_mcp", PlatformType.SDWAN, "8010"),
-        ("ise_mcp", PlatformType.ISE, "8011"),
-        ("splunk_mcp", PlatformType.SPLUNK, "8012"),
-        ("hypershield_mcp", PlatformType.HYPERSHIELD, "8013"),
-    ]
-    records = []
-    for name, platform, default_port in servers:
-        port = os.getenv(f"{name.upper().replace('_MCP', '_MCP')}_PORT", default_port)
-        host = name.replace("_", "-")
-        records.append(OASFRecord(
-            name=name,
-            platform=platform,
-            endpoint=f"http://{host}:{port}",
-        ))
-    return records
 
-
-# ---------------------------------------------------------------------------
-# MCP Client — calls downstream platform MCP servers
-# ---------------------------------------------------------------------------
-
-class MCPForwarder:
-    """Forwards MCP tool calls to platform servers via HTTP."""
-
-    def __init__(self):
-        self._http = httpx.AsyncClient(timeout=60.0)
-
-    async def call_tool(self, endpoint: str, tool_name: str, arguments: dict[str, Any]) -> Any:
-        """Call a tool on a downstream MCP server via JSON-RPC 2.0."""
-        payload = {
-            "jsonrpc": "2.0",
-            "method": "tools/call",
-            "params": {"name": tool_name, "arguments": arguments},
-            "id": f"gw-{int(time.time() * 1000)}",
-        }
+async def _publish_oasf_records(directory: DirectoryClient, specs: list[ServerSpec]) -> int:
+    """Best-effort publish of each server's OASF capability record (the JSON files
+    under ``oasf/records/``) into the AGNTCY Directory so discovery keeps working.
+    Non-fatal: a missing directory or record only logs a warning."""
+    published = 0
+    for spec in specs:
+        record_path = _REPO_ROOT / spec.oasf_record
+        if not record_path.exists():
+            logger.warning("OASF record missing for %s at %s", spec.name, record_path)
+            continue
         try:
-            resp = await self._http.post(f"{endpoint}/mcp", json=payload)
-            resp.raise_for_status()
-            result = resp.json()
-            if "error" in result:
-                return {"error": result["error"].get("message", "Unknown error")}
-            return result.get("result", result)
-        except httpx.ConnectError:
-            return {"error": f"Platform server unreachable at {endpoint}"}
-        except Exception as e:
-            return {"error": f"Forwarding error: {str(e)}"}
-
-    async def close(self):
-        await self._http.aclose()
+            record = json.loads(record_path.read_text(encoding="utf-8"))
+            await directory.register_record(record)
+            published += 1
+        except AttributeError:
+            # DirectoryClient without register_record: skip gracefully.
+            logger.debug("DirectoryClient has no register_record; skipping publish")
+            break
+        except Exception as exc:  # pragma: no cover - network failure path
+            logger.warning("Failed to publish OASF record for %s: %s", spec.name, exc)
+    return published
 
 
 # ---------------------------------------------------------------------------
@@ -177,7 +123,7 @@ class MCPForwarder:
 # ---------------------------------------------------------------------------
 
 routing = RoutingTable()
-forwarder = MCPForwarder()
+pool = MCPClientPool()
 
 
 @asynccontextmanager
@@ -189,30 +135,23 @@ async def app_lifespan():
 
     await bus.connect()
 
-    # Discover platform servers from AGNTCY Directory
-    records = await directory.discover()
-    if not records:
-        logger.warning("No records from AGNTCY Directory — using static fallback")
-        records = _build_static_records()
-    routing.load_from_oasf(records)
+    specs = load_registry()
+    routing.load_from_registry(specs)
+    await _publish_oasf_records(directory, specs)
 
-    # Periodic refresh task
     async def _refresh_loop():
         while True:
             await asyncio.sleep(60)
             try:
-                fresh = await directory.discover()
-                if fresh:
-                    routing.load_from_oasf(fresh)
-            except Exception as e:
-                logger.error("Directory refresh failed: %s", e)
+                routing.load_from_registry(load_registry())
+            except Exception as exc:
+                logger.error("Registry refresh failed: %s", exc)
 
     refresh_task = asyncio.create_task(_refresh_loop())
-
     try:
         yield {
             "routing": routing,
-            "forwarder": forwarder,
+            "pool": pool,
             "directory": directory,
             "bus": bus,
             "badge": badge,
@@ -220,172 +159,208 @@ async def app_lifespan():
         }
     finally:
         refresh_task.cancel()
-        await forwarder.close()
+        await pool.close()
         await bus.close()
         await directory.close()
 
 
 mcp = FastMCP("miga_gateway", lifespan=app_lifespan)
 
+
 # ---------------------------------------------------------------------------
 # Input Models for Meta-Tools
 # ---------------------------------------------------------------------------
 
+
 class RoleQueryInput(BaseModel):
     """Input for role-based meta-tool queries."""
+
     model_config = ConfigDict(extra="forbid")
     query: str = Field(default="", description="Natural language query or specific action")
-    platforms: Optional[list[str]] = Field(default=None, description="Filter to specific platforms")
-    tool_name: Optional[str] = Field(default=None, description="Call a specific tool directly by name")
-    arguments: dict[str, Any] = Field(default_factory=dict, description="Arguments to pass to the tool")
+    platforms: list[str] | None = Field(
+        default=None, description="Filter to specific server names (registry names)"
+    )
+    tool_name: str | None = Field(
+        default=None, description="Call a specific downstream tool directly by name"
+    )
+    arguments: dict[str, Any] = Field(
+        default_factory=dict, description="Arguments to pass to the tool"
+    )
 
 
-class CrossPlatformQueryInput(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-    question: str = Field(..., description="Cross-platform question (e.g., 'Is the network healthy?')")
-    include_stubs: bool = Field(default=False, description="Include stub server responses")
+# ---------------------------------------------------------------------------
+# Fan-out logic
+# ---------------------------------------------------------------------------
+
+
+async def _call_named_tool(
+    servers: list[ServerSpec], tool_name: str, arguments: dict[str, Any]
+) -> str:
+    """Find which registered server advertises ``tool_name`` and call it."""
+    for spec in servers:
+        try:
+            tools = await pool.list_tools(spec)
+        except MCPTransportError as exc:
+            logger.debug("list_tools failed for %s: %s", spec.name, exc)
+            continue
+        if any(t["name"] == tool_name for t in tools):
+            try:
+                result = await pool.call_tool(spec, tool_name, arguments)
+                return (
+                    json.dumps(result, indent=2, default=str)
+                    if not isinstance(result, str)
+                    else result
+                )
+            except MCPTransportError as exc:
+                return f"❌ `{tool_name}` on {spec.display_name} failed: {exc}"
+    return f"❌ Tool `{tool_name}` not found on any server for this role."
+
+
+async def _fan_out(role: MIGARole, params: RoleQueryInput, ctx) -> str:
+    """Fan out a query to all real servers (plus INFER) serving a given role."""
+    servers = routing.servers_for_role(role)
+    if params.platforms:
+        wanted = set(params.platforms)
+        servers = [s for s in servers if s.name in wanted]
+
+    if not servers:
+        return f"No servers registered for role **{role.value}**."
+
+    if params.tool_name:
+        return await _call_named_tool(servers, params.tool_name, params.arguments)
+
+    # Discovery sweep: list tools per server and call read-only summary tools.
+    lines = [f"## {role.value.title()} — Cross-Platform Summary\n"]
+
+    async def _probe(spec: ServerSpec) -> tuple[ServerSpec, Any]:
+        try:
+            tools = await pool.list_tools(spec)
+        except MCPTransportError as exc:
+            return spec, exc
+        summary_tools = [
+            t["name"] for t in tools if any(h in t["name"].lower() for h in _SUMMARY_HINTS)
+        ]
+        if not summary_tools:
+            return spec, {"tools": [t["name"] for t in tools]}
+        try:
+            return spec, await pool.call_tool(spec, summary_tools[0], {})
+        except MCPTransportError as exc:
+            return spec, exc
+
+    results = await asyncio.gather(*(_probe(s) for s in servers), return_exceptions=True)
+    for item in results:
+        if isinstance(item, Exception):
+            lines.append(f"### ❌ (gateway error)\n_{item}_\n")
+            continue
+        spec, result = item
+        if isinstance(result, (MCPTransportError, Exception)):
+            lines.append(f"### 🔴 {spec.display_name}\n_unreachable: {result}_\n")
+        else:
+            text = result if isinstance(result, str) else json.dumps(result, indent=2, default=str)
+            lines.append(f"### {spec.display_name}\n{text[:500]}\n")
+    return "\n".join(lines)
 
 
 # ---------------------------------------------------------------------------
 # Role-based Meta-Tools
 # ---------------------------------------------------------------------------
 
-async def _fan_out(role: MIGARole, params: RoleQueryInput, ctx) -> str:
-    """Fan out a query to all platform servers serving a given role."""
-    fwd: MCPForwarder = ctx.request_context.lifespan_state["forwarder"]
-    entries = routing.tools_for_role(role)
-
-    if params.tool_name:
-        entry = routing.get_tool(params.tool_name)
-        if not entry:
-            return f"❌ Tool `{params.tool_name}` not found in routing table."
-        result = await fwd.call_tool(entry.endpoint, entry.tool_name, params.arguments)
-        return json.dumps(result, indent=2, default=str)
-
-    if params.platforms:
-        entries = [e for e in entries if e.platform.value in params.platforms]
-
-    if not entries:
-        return f"No tools available for role **{role.value}**."
-
-    # Fan out to all relevant platform tools (health/summary tools)
-    tasks = []
-    for entry in entries:
-        if "health" in entry.tool_name or "overview" in entry.tool_name or "status" in entry.tool_name:
-            tasks.append((entry, fwd.call_tool(entry.endpoint, entry.tool_name, {})))
-
-    if not tasks:
-        # Just list available tools
-        lines = [f"## {role.value.title()} — Available Tools\n"]
-        for e in entries:
-            lines.append(f"- `{e.tool_name}` ({e.platform.value}) {'🔒' if e.requires_approval else ''}")
-        return "\n".join(lines)
-
-    results = await asyncio.gather(*(t[1] for t in tasks), return_exceptions=True)
-    lines = [f"## {role.value.title()} — Cross-Platform Summary\n"]
-    for (entry, _), result in zip(tasks, results):
-        if isinstance(result, Exception):
-            lines.append(f"### ❌ {entry.platform.value}\n_{result}_\n")
-        elif isinstance(result, dict) and "error" in result:
-            lines.append(f"### ❌ {entry.platform.value}\n_{result['error']}_\n")
-        else:
-            text = result if isinstance(result, str) else json.dumps(result, indent=2, default=str)
-            lines.append(f"### {entry.platform.value}\n{text[:500]}\n")
-    return "\n".join(lines)
-
 
 @mcp.tool(name="observability", annotations={"readOnlyHint": True, "idempotentHint": True})
 async def observability(params: RoleQueryInput, ctx=None) -> str:
-    """Query observability data across all Cisco platforms — health scores,
-    telemetry, monitoring alerts, ThousandEyes path analysis, INFER anomalies."""
+    """Query observability data across the registered platforms — health,
+    telemetry, ThousandEyes path analysis, Catalyst Center/Meraki assurance, and
+    INFER anomalies."""
     return await _fan_out(MIGARole.OBSERVABILITY, params, ctx)
 
 
 @mcp.tool(name="security", annotations={"readOnlyHint": True, "idempotentHint": True})
 async def security(params: RoleQueryInput, ctx=None) -> str:
-    """Query security data across all Cisco platforms — XDR threats, Meraki
-    security events, Hypershield enforcement, INFER anomaly correlation."""
+    """Query security data across the registered platforms — Splunk/Meraki security
+    events, ISE posture, and INFER anomaly correlation."""
     return await _fan_out(MIGARole.SECURITY, params, ctx)
 
 
 @mcp.tool(name="automation", annotations={"readOnlyHint": False})
 async def automation(params: RoleQueryInput, ctx=None) -> str:
-    """Execute automation workflows across platforms — command runner,
-    remediation actions, policy deployment. ⚠️ Destructive actions require approval."""
+    """Execute automation workflows across platforms — SD-WAN/Catalyst Center
+    actions and ServiceNow ticketing. ⚠️ Destructive actions require approval."""
     return await _fan_out(MIGARole.AUTOMATION, params, ctx)
 
 
 @mcp.tool(name="configuration", annotations={"readOnlyHint": True, "idempotentHint": True})
 async def configuration(params: RoleQueryInput, ctx=None) -> str:
-    """Query and manage configuration across platforms — device configs,
-    security policies, network settings, site topology."""
+    """Query and manage configuration across platforms — Meraki/SD-WAN/Catalyst
+    Center settings and NetBox source-of-truth data."""
     return await _fan_out(MIGARole.CONFIGURATION, params, ctx)
 
 
 @mcp.tool(name="compliance", annotations={"readOnlyHint": True, "idempotentHint": True})
 async def compliance(params: RoleQueryInput, ctx=None) -> str:
-    """Query compliance and audit data — posture status, policy drift,
-    certificate expiry, regulatory checks, INFER risk scoring."""
+    """Query compliance and audit data — ISE posture, NetBox change history, and
+    INFER risk scoring."""
     return await _fan_out(MIGARole.COMPLIANCE, params, ctx)
 
 
 @mcp.tool(name="identity", annotations={"readOnlyHint": True, "idempotentHint": True})
 async def identity(params: RoleQueryInput, ctx=None) -> str:
-    """Query identity and access data — ISE sessions, authentication logs,
-    endpoint profiling, AGNTCY agent identity badges."""
+    """Query identity and access data — Cisco ISE sessions, endpoints, and
+    authorization posture."""
     return await _fan_out(MIGARole.IDENTITY, params, ctx)
 
 
 # ---------------------------------------------------------------------------
-# Cross-platform convenience tool
+# Cross-platform convenience + health
 # ---------------------------------------------------------------------------
+
 
 @mcp.tool(name="network_status", annotations={"readOnlyHint": True, "idempotentHint": True})
 async def network_status(ctx=None) -> str:
-    """Get a quick cross-platform network status summary."""
-    fwd: MCPForwarder = ctx.request_context.lifespan_state["forwarder"]
-    endpoints = routing.all_endpoints()
+    """Get a quick cross-platform reachability summary of all registered servers."""
+    servers = routing.all()
+    lines = ["## MIGA — Network Status Overview\n", f"**Registered Servers:** {len(servers)}\n"]
 
-    lines = ["## MIGA — Network Status Overview\n"]
-    lines.append(f"**Connected Servers:** {len(endpoints)}\n")
+    async def _check(spec: ServerSpec):
+        try:
+            await pool.list_tools(spec)
+            return spec, True
+        except Exception:
+            return spec, False
 
-    health_tasks = []
-    for name, endpoint in endpoints.items():
-        health_tool = f"{name.replace('_mcp', '')}_health"
-        health_tasks.append((name, fwd.call_tool(endpoint, health_tool, {})))
-
-    results = await asyncio.gather(*(t[1] for t in health_tasks), return_exceptions=True)
-    for (name, _), result in zip(health_tasks, results):
-        if isinstance(result, Exception) or (isinstance(result, dict) and "error" in result):
-            lines.append(f"- 🔴 **{name}** — unreachable")
-        else:
-            lines.append(f"- 🟢 **{name}** — healthy")
-
+    results = await asyncio.gather(*(_check(s) for s in servers.values()), return_exceptions=True)
+    for item in results:
+        if isinstance(item, Exception):
+            continue
+        spec, ok = item
+        dot = "🟢" if ok else "🔴"
+        state = "reachable" if ok else "unreachable"
+        lines.append(f"- {dot} **{spec.display_name}** (`{spec.name}`) — {state}")
     return "\n".join(lines)
 
-
-# ---------------------------------------------------------------------------
-# Gateway Health
-# ---------------------------------------------------------------------------
 
 @mcp.tool(name="gateway_health", annotations={"readOnlyHint": True})
 async def gateway_health(ctx=None) -> str:
     """Gateway health check — routing table status and uptime."""
     state = ctx.request_context.lifespan_state
     uptime = time.time() - state["start_time"]
-    endpoints = routing.all_endpoints()
-    return json.dumps({
-        "service": "miga_gateway",
-        "status": "healthy",
-        "version": "1.0.0",
-        "uptime_seconds": round(uptime, 1),
-        "routing_table": {
-            "servers": len(endpoints),
-            "tools": len(routing._by_tool),
-            "last_refresh": routing._last_refresh,
+    servers = routing.all()
+    return json.dumps(
+        {
+            "service": "miga_gateway",
+            "status": "healthy",
+            "version": "1.0.0",
+            "uptime_seconds": round(uptime, 1),
+            "routing_table": {
+                "servers": len(servers),
+                "last_refresh": routing._last_refresh,
+            },
+            "servers": {
+                name: {"transport": spec.transport_type, "roles": spec.roles, "status": spec.status}
+                for name, spec in servers.items()
+            },
         },
-        "endpoints": endpoints,
-    }, indent=2)
+        indent=2,
+    )
 
 
 if __name__ == "__main__":

@@ -53,45 +53,14 @@ webexBot:
       memory: 512Mi
 
 # ---------------------------------------------------------------------------
-# Platform Servers (fully implemented)
+# Platform Servers
 # ---------------------------------------------------------------------------
+# After the real-server migration, the platform layer is made of REAL, external
+# MCP servers the gateway connects to as a client (see config/server-registry.yaml).
+# They are NOT deployed as MIGA Helm Deployments. The only MIGA-built server is
+# INFER, the cross-platform fusion engine. Provision external servers out-of-band
+# and point the registry at their endpoints.
 servers:
-  catalystCenter:
-    enabled: true
-    replicaCount: 1
-    port: 8001
-    image:
-      repository: miga/catalyst-center-mcp
-  meraki:
-    enabled: true
-    replicaCount: 1
-    port: 8002
-    image:
-      repository: miga/meraki-mcp
-  thousandeyes:
-    enabled: true
-    replicaCount: 1
-    port: 8003
-    image:
-      repository: miga/thousandeyes-mcp
-  webex:
-    enabled: true
-    replicaCount: 1
-    port: 8004
-    image:
-      repository: miga/webex-mcp
-  xdr:
-    enabled: true
-    replicaCount: 1
-    port: 8005
-    image:
-      repository: miga/xdr-mcp
-  securityCloudControl:
-    enabled: true
-    replicaCount: 1
-    port: 8006
-    image:
-      repository: miga/security-cloud-control-mcp
   infer:
     enabled: true
     replicaCount: 1
@@ -105,53 +74,6 @@ servers:
       limits:
         cpu: 2000m
         memory: 2Gi
-
-# ---------------------------------------------------------------------------
-# Stub Servers (disabled by default)
-# ---------------------------------------------------------------------------
-stubs:
-  appdynamics:
-    enabled: false
-    port: 8008
-    image:
-      repository: miga/appdynamics-mcp
-  nexusDashboard:
-    enabled: false
-    port: 8009
-    image:
-      repository: miga/nexus-dashboard-mcp
-  sdwan:
-    enabled: false
-    port: 8010
-    image:
-      repository: miga/sdwan-mcp
-  ise:
-    enabled: false
-    port: 8011
-    image:
-      repository: miga/ise-mcp
-  splunk:
-    enabled: false
-    port: 8012
-    image:
-      repository: miga/splunk-mcp
-  hypershield:
-    enabled: false
-    port: 8013
-    image:
-      repository: miga/hypershield-mcp
-
-  servicenow:
-    enabled: false
-    port: 8014
-    image:
-      repository: miga/servicenow-mcp
-
-  netbox:
-    enabled: false
-    port: 8015
-    image:
-      repository: miga/netbox-mcp
 
 # ---------------------------------------------------------------------------
 # Infrastructure

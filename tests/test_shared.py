@@ -1,11 +1,17 @@
 """Tests for miga_shared models, formatters, AGNTCY, and error handling."""
+
 from __future__ import annotations
 
 import json
 from datetime import datetime, timedelta, timezone
 
-import pytest
-
+from miga_shared.agntcy import OASFRecord
+from miga_shared.errors import (
+    AuthenticationError,
+    MIGAError,
+    PlatformAPIError,
+    RateLimitError,
+)
 from miga_shared.models import (
     AuditLogEntry,
     CorrelatedEvent,
@@ -13,23 +19,14 @@ from miga_shared.models import (
     MIGARole,
     PlatformCapability,
     PlatformType,
-    SeverityLevel,
     ToolResponse,
 )
-from miga_shared.errors import (
-    ApprovalRequiredError,
-    AuthenticationError,
-    MIGAError,
-    PlatformAPIError,
-    RateLimitError,
-)
 from miga_shared.utils.formatters import Fmt
-from miga_shared.agntcy import OASFRecord
-
 
 # ---------------------------------------------------------------------------
 # Models
 # ---------------------------------------------------------------------------
+
 
 class TestMIGARole:
     def test_all_roles_defined(self):
@@ -45,11 +42,16 @@ class TestMIGARole:
 
 class TestPlatformType:
     def test_all_platforms_defined(self):
+        # The PlatformType enum is part of miga_shared and is intentionally left
+        # intact by the real-server migration (INFER and several models still
+        # reference it). It enumerates all platform identifiers MIGA has ever
+        # modeled, independent of which servers are currently registered.
         platforms = list(PlatformType)
-        assert len(platforms) == 13
+        assert len(platforms) == 15
         assert PlatformType.CATALYST_CENTER in platforms
         assert PlatformType.INFER in platforms
-        assert PlatformType.HYPERSHIELD in platforms
+        assert PlatformType.SERVICENOW in platforms
+        assert PlatformType.NETBOX in platforms
 
 
 class TestToolResponse:
@@ -175,6 +177,7 @@ class TestPlatformCapability:
 # Errors
 # ---------------------------------------------------------------------------
 
+
 class TestErrors:
     def test_miga_error_to_tool_error(self):
         err = MIGAError("Something failed", details="Check logs")
@@ -200,6 +203,7 @@ class TestErrors:
 # ---------------------------------------------------------------------------
 # Formatters
 # ---------------------------------------------------------------------------
+
 
 class TestFormatters:
     def test_severity_emoji(self):
@@ -229,6 +233,7 @@ class TestFormatters:
 # ---------------------------------------------------------------------------
 # AGNTCY OASF
 # ---------------------------------------------------------------------------
+
 
 class TestOASFRecord:
     def test_to_dict(self):
@@ -270,7 +275,14 @@ class TestOASFRecord:
             "modules": {
                 "mcp_server": {
                     "tools": [
-                        {"name": "xdr_get_incidents", "description": "Get incidents", "roles": ["security"], "read_only": True, "destructive": False, "requires_approval": False},
+                        {
+                            "name": "xdr_get_incidents",
+                            "description": "Get incidents",
+                            "roles": ["security"],
+                            "read_only": True,
+                            "destructive": False,
+                            "requires_approval": False,
+                        },
                     ]
                 }
             },

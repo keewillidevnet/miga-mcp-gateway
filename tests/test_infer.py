@@ -1,9 +1,8 @@
 """Tests for INFER correlation, RCA, anomaly detection, and prediction."""
+
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
-
-import pytest
 
 from miga_shared.models import CorrelatedEvent, PlatformType, SeverityLevel
 from servers.infer_mcp.server import (
@@ -42,7 +41,9 @@ class TestCorrelateEvents:
     def test_two_overlapping_events_group(self):
         events = [
             _make_event(PlatformType.THOUSANDEYES, "path_loss", entities=["router-01"]),
-            _make_event(PlatformType.MERAKI, "vpn_tunnel_flap", entities=["router-01"], offset_seconds=60),
+            _make_event(
+                PlatformType.MERAKI, "vpn_tunnel_flap", entities=["router-01"], offset_seconds=60
+            ),
         ]
         groups = correlate_events(events, window_seconds=300)
         assert len(groups) == 1
@@ -68,9 +69,16 @@ class TestCorrelateEvents:
 
     def test_three_event_group(self):
         events = [
-            _make_event(PlatformType.THOUSANDEYES, "path_loss", severity=SeverityLevel.HIGH, entities=["site-a"]),
+            _make_event(
+                PlatformType.THOUSANDEYES,
+                "path_loss",
+                severity=SeverityLevel.HIGH,
+                entities=["site-a"],
+            ),
             _make_event(PlatformType.MERAKI, "vpn_flap", entities=["site-a"], offset_seconds=30),
-            _make_event(PlatformType.CATALYST_CENTER, "device_error", entities=["site-a"], offset_seconds=90),
+            _make_event(
+                PlatformType.CATALYST_CENTER, "device_error", entities=["site-a"], offset_seconds=90
+            ),
         ]
         groups = correlate_events(events, window_seconds=300)
         assert len(groups) == 1
@@ -83,7 +91,11 @@ class TestMatchRootCause:
         group = {
             "platforms": ["thousandeyes", "meraki"],
             "events": [
-                {"source_platform": "thousandeyes", "event_type": "path_loss", "severity": "medium"},
+                {
+                    "source_platform": "thousandeyes",
+                    "event_type": "path_loss",
+                    "severity": "medium",
+                },
                 {"source_platform": "meraki", "event_type": "vpn_tunnel_flap", "severity": "low"},
             ],
         }
@@ -97,7 +109,11 @@ class TestMatchRootCause:
         group = {
             "platforms": ["catalyst_center", "meraki"],
             "events": [
-                {"source_platform": "catalyst_center", "event_type": "device_unreachable", "severity": "high"},
+                {
+                    "source_platform": "catalyst_center",
+                    "event_type": "device_unreachable",
+                    "severity": "high",
+                },
                 {"source_platform": "meraki", "event_type": "ap_offline", "severity": "medium"},
             ],
         }
@@ -109,7 +125,11 @@ class TestMatchRootCause:
         group = {
             "platforms": ["xdr", "meraki"],
             "events": [
-                {"source_platform": "xdr", "event_type": "suspicious_traffic", "severity": "medium"},
+                {
+                    "source_platform": "xdr",
+                    "event_type": "suspicious_traffic",
+                    "severity": "medium",
+                },
                 {"source_platform": "meraki", "event_type": "new_flow_spike", "severity": "low"},
             ],
         }
@@ -145,20 +165,24 @@ class TestDetectAnomalies:
         events = []
         # Normal: every 60s for 5 events
         for i in range(5):
-            events.append(CorrelatedEvent(
-                source_platform=PlatformType.XDR,
-                event_type="alert",
-                timestamp=now - timedelta(seconds=300 - i * 60),
-                affected_entities=["host-a"],
-            ))
+            events.append(
+                CorrelatedEvent(
+                    source_platform=PlatformType.XDR,
+                    event_type="alert",
+                    timestamp=now - timedelta(seconds=300 - i * 60),
+                    affected_entities=["host-a"],
+                )
+            )
         # Burst: 3 events in 5 seconds
         for i in range(3):
-            events.append(CorrelatedEvent(
-                source_platform=PlatformType.XDR,
-                event_type="alert",
-                timestamp=now - timedelta(seconds=5 - i),
-                affected_entities=["host-a"],
-            ))
+            events.append(
+                CorrelatedEvent(
+                    source_platform=PlatformType.XDR,
+                    event_type="alert",
+                    timestamp=now - timedelta(seconds=5 - i),
+                    affected_entities=["host-a"],
+                )
+            )
         anomalies = detect_anomalies(events)
         # Should detect the frequency spike
         assert isinstance(anomalies, list)
@@ -171,8 +195,20 @@ class TestPredictFailures:
     def test_cascading_failure_prediction(self):
         events = [
             _make_event(PlatformType.CATALYST_CENTER, "error", SeverityLevel.HIGH, ["switch-01"]),
-            _make_event(PlatformType.CATALYST_CENTER, "error", SeverityLevel.HIGH, ["switch-02"], offset_seconds=10),
-            _make_event(PlatformType.CATALYST_CENTER, "error", SeverityLevel.HIGH, ["switch-03"], offset_seconds=20),
+            _make_event(
+                PlatformType.CATALYST_CENTER,
+                "error",
+                SeverityLevel.HIGH,
+                ["switch-02"],
+                offset_seconds=10,
+            ),
+            _make_event(
+                PlatformType.CATALYST_CENTER,
+                "error",
+                SeverityLevel.HIGH,
+                ["switch-03"],
+                offset_seconds=20,
+            ),
         ]
         predictions = predict_failures(events, [])
         assert len(predictions) >= 1
@@ -182,8 +218,20 @@ class TestPredictFailures:
     def test_complex_incident_prediction(self):
         events = [
             _make_event(PlatformType.THOUSANDEYES, "path_loss", SeverityLevel.HIGH, ["site-a"]),
-            _make_event(PlatformType.MERAKI, "tunnel_flap", SeverityLevel.MEDIUM, ["site-a"], offset_seconds=30),
-            _make_event(PlatformType.CATALYST_CENTER, "device_down", SeverityLevel.HIGH, ["site-a"], offset_seconds=60),
+            _make_event(
+                PlatformType.MERAKI,
+                "tunnel_flap",
+                SeverityLevel.MEDIUM,
+                ["site-a"],
+                offset_seconds=30,
+            ),
+            _make_event(
+                PlatformType.CATALYST_CENTER,
+                "device_down",
+                SeverityLevel.HIGH,
+                ["site-a"],
+                offset_seconds=60,
+            ),
         ]
         predictions = predict_failures(events, [])
         complex_preds = [p for p in predictions if p["type"] == "complex_incident"]
