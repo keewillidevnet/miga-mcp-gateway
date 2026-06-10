@@ -110,3 +110,18 @@ class TestMissingEnv:
         spec = next(s for s in load_registry() if s.name == "meraki")
         env = {"MERAKI_API_KEY": "k", "MERAKI_ORG_ID": "o"}
         assert spec.missing_env(environ=env) == []
+
+
+class TestBearerOverHttpsOnly:
+    def test_bearer_attached_over_https(self):
+        spec = next(s for s in load_registry() if s.name == "thousandeyes")
+        assert spec.url.startswith("https://")
+        headers = spec.auth_headers(environ={"TE_TOKEN": "tok"})
+        assert headers["Authorization"] == "Bearer tok"
+
+    def test_bearer_refused_over_non_https(self):
+        # Tamper the resolved URL to a non-TLS host; the token must NOT be attached.
+        spec = next(s for s in load_registry() if s.name == "thousandeyes")
+        spec.transport["url"] = "http://evil.example.com/mcp"
+        headers = spec.auth_headers(environ={"TE_TOKEN": "tok"})
+        assert "Authorization" not in headers

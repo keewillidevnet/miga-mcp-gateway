@@ -184,6 +184,37 @@ followed upstream and updated `config/server-registry.yaml` (still valid against
   behaviors that fail identically on pristine `main` (verified); the bot is out of
   migration scope, so they are marked `xfail` rather than masked.
 
+## Security hardening
+
+A security review of this branch's new attack surface (the gateway now spawns
+processes and talks to third-party servers) produced these fixes, included here:
+
+- **Least-privilege subprocess env (HIGH).** `MCPClientPool` previously passed the
+  *entire* gateway environment to every spawned stdio server, exposing all platform
+  secrets to each upstream process. It now passes only a minimal base allowlist
+  (`PATH`, `HOME`, `PYTHONPATH`, …) plus that server's declared `env_required`, so
+  e.g. the SD-WAN container never receives the ServiceNow/NetBox/ThousandEyes
+  secrets. (`miga_shared/transport.py`)
+- **Bearer token only over HTTPS (MEDIUM).** The registry refuses to attach an
+  `Authorization: Bearer` header to a non-`https://` URL, failing closed if a URL
+  (or its `${ENV}` host) is tampered with — mitigating token exfiltration / SSRF.
+  Treat `.env` as a secret with restricted permissions. (`miga_shared/registry.py`)
+- **Forwarded-output cap (MEDIUM).** Output from untrusted upstream servers is
+  size-capped (`MIGA_MAX_TOOL_RESPONSE_CHARS`, default 50k) before being returned to
+  the bot/INFER, both at the transport boundary and on the gateway's named-tool path.
+  (`miga_shared/transport.py`, `packages/gateway/server.py`)
+- **Docker socket privilege (HIGH, documented).** `docker-compose.yml` mounts the
+  Docker socket so the gateway can spawn the SD-WAN stdio image — root-equivalent
+  host access. The compose file now documents safer alternatives (SD-WAN as a
+  sidecar, a restricted socket proxy, or rootless Docker).
+
+Still open / operator responsibility (not changed here): ServiceNow is read/write —
+gate it with `MCP_TOOL_PACKAGE` + a least-privilege account and ensure the WebEx
+bot's HITL approval covers write tools; the upstream Catalyst Center server forces
+TLS verification off in its own code; and `packages/cli/miga_cli.py` uses
+`subprocess(..., shell=True)` (pre-existing, do-not-touch file). New tests cover the
+env scoping, output cap, and bearer-over-HTTPS behavior.
+
 ## Lint / CI
 
 `main` was not ruff-clean (433 lint errors; 34 files unformatted), so the CI

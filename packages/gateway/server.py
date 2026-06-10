@@ -42,6 +42,16 @@ logger = logging.getLogger("miga.gateway")
 
 _REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 
+# Defense-in-depth cap on output forwarded from untrusted upstream servers.
+MAX_FORWARDED_CHARS = int(os.getenv("MIGA_MAX_TOOL_RESPONSE_CHARS", "50000"))
+
+
+def _cap(text: str) -> str:
+    if len(text) > MAX_FORWARDED_CHARS:
+        return text[:MAX_FORWARDED_CHARS] + "\n…[truncated by MIGA gateway]"
+    return text
+
+
 # Tool-name fragments that are safe, read-only "summary" calls to fan out with no
 # arguments during a role sweep.
 _SUMMARY_HINTS = ("health", "overview", "status", "summary", "list")
@@ -206,11 +216,10 @@ async def _call_named_tool(
         if any(t["name"] == tool_name for t in tools):
             try:
                 result = await pool.call_tool(spec, tool_name, arguments)
-                return (
-                    json.dumps(result, indent=2, default=str)
-                    if not isinstance(result, str)
-                    else result
+                text = (
+                    result if isinstance(result, str) else json.dumps(result, indent=2, default=str)
                 )
+                return _cap(text)
             except MCPTransportError as exc:
                 return f"❌ `{tool_name}` on {spec.display_name} failed: {exc}"
     return f"❌ Tool `{tool_name}` not found on any server for this role."
