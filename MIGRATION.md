@@ -256,6 +256,34 @@ platform list in `packages/cli/miga_cli.py`, now derived from the registry, and 
 stale `docs/CONTRIBUTING.md` stub-creation flow, now rewritten for the registry +
 OASF model.)
 
+## Tech debt — AGNTCY Directory integration gap
+
+The AGNTCY Directory integration is **not wired to the real product** and is the
+main item to address before any AGNTCY-Directory-dependent claim is load-bearing:
+
+- **Wrong/placeholder image.** `docker-compose.yml` references
+  `ghcr.io/agntcy/directory:latest`, which does not exist (a `docker compose up`
+  pull returns `denied`). The real product is `ghcr.io/agntcy/dir-apiserver` — a
+  multi-service system: a **gRPC** apiserver on `:8888`, a `zot` OCI registry
+  (records are stored as OCI artifacts), `postgres` (search/index), and a
+  `reconciler`.
+- **API mismatch.** MIGA's `miga_shared/agntcy/DirectoryClient` is a simplified REST
+  `/v1/records` client (HTTP `:8500`) that predates this work and does **not** match
+  the real directory's gRPC + OCI API.
+- **Impact: none on the gateway.** `DirectoryClient.register` / `register_record`
+  are best-effort; on connection failure they return `"standalone"` and the gateway
+  runs with `config/server-registry.yaml` as the source of truth (registry reload is
+  the actual discovery path). The 9 OASF records validate against OASF **1.0.0** but
+  are **not published to a live directory**.
+- **Identity/SLIM/Observability** are likewise not implemented: `IdentityBadge` is a
+  scaffold with no real crypto; SLIM and OpenTelemetry are future (v2) items. The
+  README has been corrected to label these as planned.
+- **Follow-up to wire it for real:** point compose at `ghcr.io/agntcy/dir-apiserver`
+  (+ `zot` + `postgres` + `reconciler`) with a **pinned tag** (not `:latest`) per the
+  directory's own quickstart, and move `DirectoryClient` to the gRPC API. If only the
+  OASF validate endpoint MIGA already talks to is needed, run
+  `ghcr.io/agntcy/oasf-server` instead.
+
 ## License
 
 Apache-2.0 preserved (`LICENSE` unchanged). No source files carried per-file SPDX
