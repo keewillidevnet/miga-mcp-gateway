@@ -6,6 +6,7 @@ or Markdown in the WebEx room.
 """
 from __future__ import annotations
 
+import json
 import logging
 import os
 from typing import Any
@@ -98,6 +99,67 @@ def _extract_text(content: Any) -> str:
     return "\n".join(texts)
 
 
+def _unwrap_result(data: Any, _depth: int = 0) -> Any:
+    """Unwrap FastMCP structured-output envelopes. A tool that returns a plain string is
+    delivered as ``{"result": "<string>"}``; the gateway's role meta-tools json.dumps that,
+    so an INFER reply arrives as the JSON text ``{"result": "## INFER — ...markdown..."}``.
+    Peel any nested single-key ``result`` wrappers to recover the inner markdown."""
+    while isinstance(data, dict) and set(data.keys()) == {"result"} and _depth < 5:
+        data = data["result"]
+        _depth += 1
+    return data
+
+
+def _render_gateway_health(d: dict[str, Any]) -> str:
+    """Render the gateway_health JSON object as readable markdown."""
+    status = str(d.get("status", "unknown"))
+    emoji = "🟢" if status == "healthy" else "🔴"
+    lines = [
+        "## MIGA — Gateway Health",
+        "",
+        f"{emoji} **{status.title()}** — `{d.get('service', 'miga_gateway')}` v{d.get('version', '?')}",
+    ]
+    up = d.get("uptime_seconds")
+    if up is not None:
+        lines.append(f"**Uptime:** {up}s")
+    servers = d.get("servers") or {}
+    rt = d.get("routing_table") or {}
+    if rt or servers:
+        lines.append(f"**Registered servers:** {rt.get('servers', len(servers))}")
+    if servers:
+        lines.append("")
+        lines.append("**Servers:**")
+        for name, meta in servers.items():
+            meta = meta or {}
+            roles = ", ".join(meta.get("roles", []) or [])
+            transport = meta.get("transport", "?")
+            lines.append(f"- `{name}` — {transport}" + (f" · {roles}" if roles else ""))
+    return "\n".join(lines)
+
+
+def _render_reply(text: str) -> str:
+    """Turn a raw tool reply into clean markdown for Webex.
+
+    Plain-markdown replies (network_status, help, error strings) pass through untouched.
+    JSON replies are unwrapped: INFER ``{"result": ...}`` envelopes become their inner
+    markdown (json.loads also decodes the escaped unicode), and the gateway_health object
+    is rendered to readable text. Any other JSON object falls back to a fenced, unescaped
+    block rather than a raw one-line envelope."""
+    s = (text or "").lstrip()
+    if not s.startswith(("{", "[")):
+        return text
+    try:
+        data = json.loads(s)
+    except (ValueError, TypeError):
+        return text
+    data = _unwrap_result(data)
+    if isinstance(data, str):
+        return data
+    if isinstance(data, dict) and data.get("service") == "miga_gateway":
+        return _render_gateway_health(data)
+    return "```json\n" + json.dumps(data, indent=2, ensure_ascii=False) + "\n```"
+
+
 async def _call_gateway_mcp(tool_name: str, arguments: dict[str, Any]) -> str:
     """Primary path: call the gateway as an MCP client over streamable-http.
 
@@ -144,8 +206,8 @@ async def call_gateway(tool_name: str, arguments: dict[str, Any] | None = None) 
     arguments = arguments or {}
     try:
         if GATEWAY_MODE == "http":
-            return await _call_gateway_http(tool_name, arguments)
-        return await _call_gateway_mcp(tool_name, arguments)
+            return _render_reply(await _call_gateway_http(tool_name, arguments))
+        return _render_reply(await _call_gateway_mcp(tool_name, arguments))
     except httpx.ConnectError:
         return "❌ MIGA Gateway is unreachable. Please check the cluster status."
     except Exception as e:  # noqa: BLE001 - best-effort: never raise into the handler
