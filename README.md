@@ -97,8 +97,8 @@ Center, ISE, ServiceNow, NetBox) report unreachable until you configure them.
 # Clone the repository
 git clone https://github.com/keewillidevnet/miga-mcp-gateway.git && cd miga-mcp-gateway
 
-# Launch the core gateway + INFER
-docker compose up -d
+# Launch the core stack (gateway, INFER, redis); external platforms are built separately
+docker compose up -d redis gateway infer-mcp
 
 # Check reachability of every registered server
 python -m packages.cli.miga_cli status
@@ -151,46 +151,57 @@ all-8-platform live run claimed here.
 ### Running the bot (credential-free)
 
 ```bash
-# 1. Bring up the core stack (gateway + INFER + redis)
-docker compose up -d
+# ===========================================================
+#  Run the MIGA bot with no external platform credentials
+# ===========================================================
 
-# 2. Start the bot (serves the webhook listener on :9000)
-export MIGA_GATEWAY_URL=http://localhost:8000 MIGA_BOT_GATEWAY_MODE=mcp
-python -m packages.webex_bot.app
+# ---- Prerequisites (do these once) ------------------------
+cloudflared --version            # need a tunnel tool (or: ngrok version)
+# Create a Webex bot at https://developer.webex.com/my-apps (Create a Bot);
+# copy its access token and its bot email (ends in @webex.bot).
+git clone https://github.com/keewillidevnet/miga-mcp-gateway.git
+cd miga-mcp-gateway
+cp .env.example .env
+# Edit .env and set exactly these two values:
+#   WEBEX_BOT_ACCESS_TOKEN=<your bot access token>
+#   WEBEX_BOT_EMAIL=<your bot's @webex.bot email>
+pip install aiohttp httpx mcp    # deps for the local (non-container) processes
 
-# 3. Expose the webhook with an ephemeral tunnel, then register it
-cloudflared tunnel --url http://localhost:9000
-export WEBEX_PUBLIC_URL=https://<your-tunnel>.trycloudflare.com
-python -m packages.webex_bot.register_webhook
-```
+# ---- Option A: one command (recommended) ------------------
+# Brings up the stack, starts the bot, opens the tunnel, and
+# registers the webhook, with preflight checks at each step.
+./scripts/run_demo.sh            # add --mode http if the handshake misbehaves
+# When it prints READY, skip to "Try it" below.
 
-Or run all of it with one command: `scripts/run_demo.sh`. Full walkthrough with live
-evidence in [docs/BOT_DEMO.md](docs/BOT_DEMO.md).
+# ---- Option B: manual, step by step (two terminals) -------
+# Terminal 1 - stack + bot (leave running):
+docker compose up -d redis gateway infer-mcp
+# Wait for INFER to come up (a few seconds after 'up -d'), then probe:
+until docker compose exec gateway curl -sf http://infer-mcp:8007/health; do sleep 2; done
+# -> {"status":"ok","service":"infer_mcp"}
+set -a; source .env; set +a
+export MIGA_GATEWAY_URL=http://localhost:8000
+export MIGA_BOT_GATEWAY_MODE=mcp
+python -m packages.webex_bot.app                                    # serves :9000; leave running
 
-## Project Structure
+# Terminal 2 - tunnel + webhook:
+cloudflared tunnel --url http://localhost:9000 > /tmp/miga-tunnel.log 2>&1 &
+sleep 6
+grep -o 'https://[a-z0-9-]*\.trycloudflare\.com' /tmp/miga-tunnel.log   # copy the URL it prints
+set -a; source .env; set +a
+export WEBEX_PUBLIC_URL=<paste-the-https-URL-above>
+python -m packages.webex_bot.register_webhook                          # expect: webhooks created
 
-```
-miga-mcp-gateway/
-├── config/
-│   ├── server-registry.yaml         # Authoritative: how the gateway connects to each server
-│   └── server-registry.schema.json  # JSON schema the registry is validated against
-├── oasf/
-│   ├── OASF_RECORDS.md              # OASF record authoring guide
-│   └── records/*.record.json        # One OASF capability record per registered server
-├── miga_shared/
-│   ├── registry.py                  # Registry loader (parse, validate, resolve ${ENV})
-│   ├── transport.py                 # MCP client transport: HTTP/SSE + stdio (docker run -i)
-│   └── ...                          # auth, AGNTCY, models, formatters
-├── packages/
-│   ├── gateway/                     # Gateway MCP Server (registry-driven role routing)
-│   ├── webex_bot/                   # WebEx Bot (NLP + MCP Client + Adaptive Cards)
-│   └── cli/                         # miga-cli tool
-├── servers/
-│   └── infer_mcp/                   # INFER fusion engine — MIGA's only original server
-├── helm/miga/                       # Helm chart (gateway, bot, INFER)
-├── docs/                            # Documentation
-├── docker-compose.yml               # Local cluster (core + compose servers)
-└── .env.example                     # Environment template (every registry env var)
+# ---- Try it (type these in Webex, not the shell) ----------
+#   help
+#   gateway status      # live data immediately
+#   network status      # live data immediately
+#   risk score          # runs; reads 0/100 until telemetry flows
+
+# ---- Teardown ---------------------------------------------
+kill %1                 # Terminal 2: stop the tunnel
+# Terminal 1: Ctrl-C the bot, then:
+docker compose down
 ```
 
 ## Platform Coverage
@@ -338,6 +349,32 @@ helm install miga ./helm/miga --namespace miga --create-namespace
 ```
 (The Helm chart deploys the gateway, WebEx bot, and INFER. External platform servers are
 provisioned out-of-band and referenced via the registry.)
+
+## Project Structure
+
+```
+miga-mcp-gateway/
+├── config/
+│   ├── server-registry.yaml         # Authoritative: how the gateway connects to each server
+│   └── server-registry.schema.json  # JSON schema the registry is validated against
+├── oasf/
+│   ├── OASF_RECORDS.md              # OASF record authoring guide
+│   └── records/*.record.json        # One OASF capability record per registered server
+├── miga_shared/
+│   ├── registry.py                  # Registry loader (parse, validate, resolve ${ENV})
+│   ├── transport.py                 # MCP client transport: HTTP/SSE + stdio (docker run -i)
+│   └── ...                          # auth, AGNTCY, models, formatters
+├── packages/
+│   ├── gateway/                     # Gateway MCP Server (registry-driven role routing)
+│   ├── webex_bot/                   # WebEx Bot (NLP + MCP Client + Adaptive Cards)
+│   └── cli/                         # miga-cli tool
+├── servers/
+│   └── infer_mcp/                   # INFER fusion engine — MIGA's only original server
+├── helm/miga/                       # Helm chart (gateway, bot, INFER)
+├── docs/                            # Documentation
+├── docker-compose.yml               # Local cluster (core + compose servers)
+└── .env.example                     # Environment template (every registry env var)
+```
 
 ## Contributing
 
