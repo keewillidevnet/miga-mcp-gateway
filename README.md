@@ -139,7 +139,7 @@ renders the reply as Markdown or an Adaptive Card.
 | Conversational interface (NLP -> gateway -> WebEx) | ✅ Implemented |
 | MCP client to the gateway (streamable-http) | ✅ Implemented (internal HTTP dev fallback available) |
 | Webhook self-registration | ✅ Implemented (`python -m packages.webex_bot.register_webhook`) |
-| Credential-free live demo (INFER + `network_status` + `gateway_health`) | ✅ Implemented; see [docs/BOT_DEMO.md](docs/BOT_DEMO.md). Not live-verified in this repo. |
+| Credential-free live demo (INFER + `network_status` + `gateway_health`) | ✅ Implemented; see [docs/BOT_DEMO.md](docs/BOT_DEMO.md). Verified live via docker compose + cloudflared tunnel. |
 | Multi-platform live data | 🔲 Requires platform credentials (separate step) |
 | Automation / HITL approval | 🟡 Partial: the bot acknowledges approve/reject, but releasing a held action on the decision is not yet wired. |
 
@@ -147,6 +147,25 @@ A credential-free demo exercises INFER plus status with no external platform cre
 and an ephemeral tunnel for the webhook (no standing host). Dev mode bypasses Entra JWT.
 Full multi-platform operation requires credentials and is a separate step; there is no
 all-8-platform live run claimed here.
+
+### Running the bot (credential-free)
+
+```bash
+# 1. Bring up the core stack (gateway + INFER + redis)
+docker compose up -d
+
+# 2. Start the bot (serves the webhook listener on :9000)
+export MIGA_GATEWAY_URL=http://localhost:8000 MIGA_BOT_GATEWAY_MODE=mcp
+python -m packages.webex_bot.app
+
+# 3. Expose the webhook with an ephemeral tunnel, then register it
+cloudflared tunnel --url http://localhost:9000
+export WEBEX_PUBLIC_URL=https://<your-tunnel>.trycloudflare.com
+python -m packages.webex_bot.register_webhook
+```
+
+Or run all of it with one command: `scripts/run_demo.sh`. Full walkthrough with live
+evidence in [docs/BOT_DEMO.md](docs/BOT_DEMO.md).
 
 ## Project Structure
 
