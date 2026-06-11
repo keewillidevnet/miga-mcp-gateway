@@ -139,7 +139,7 @@ renders the reply as Markdown or an Adaptive Card.
 | Conversational interface (NLP -> gateway -> WebEx) | ✅ Implemented |
 | MCP client to the gateway (streamable-http) | ✅ Implemented (internal HTTP dev fallback available) |
 | Webhook self-registration | ✅ Implemented (`python -m packages.webex_bot.register_webhook`) |
-| Credential-free live demo (INFER + `network_status` + `gateway_health`) | ✅ Implemented; see [docs/BOT_DEMO.md](docs/BOT_DEMO.md). Not live-verified in this repo. |
+| Credential-free live demo (INFER + `network_status` + `gateway_health`) | ✅ Implemented; see [docs/BOT_DEMO.md](docs/BOT_DEMO.md). Verified live via docker compose + cloudflared tunnel. |
 | Multi-platform live data | 🔲 Requires platform credentials (separate step) |
 | Automation / HITL approval | 🟡 Partial: the bot acknowledges approve/reject, but releasing a held action on the decision is not yet wired. |
 
