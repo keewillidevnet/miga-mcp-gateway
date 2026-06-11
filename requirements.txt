@@ -19,6 +19,9 @@ cryptography>=41.0.0
 
 # WebEx Bot
 aiohttp>=3.9.0
+# MCP client used by the WebEx bot to call the gateway (do not rely on the
+# gateway's install; fastmcp bundles mcp but the bot declares it explicitly).
+mcp>=1.0.0
 
 # CLI
 click>=8.1.0

@@ -70,10 +70,6 @@ class TestIntentRecognition:
         assert intent.category == IntentCategory.OBSERVABILITY
         assert intent.platform == "infer"
 
-    @pytest.mark.xfail(
-        reason="pre-existing webex_bot NLP behavior on main; bot is out of migration scope",
-        strict=False,
-    )
     def test_anomaly_detection(self):
         intent = recognize_intent("any anomalous patterns?")
         assert intent.category == IntentCategory.OBSERVABILITY

@@ -47,3 +47,6 @@ htmlcov/
 
 # Helm
 helm/miga/charts/
+
+# WebEx demo run artifacts (run_demo.sh)
+demo-evidence/

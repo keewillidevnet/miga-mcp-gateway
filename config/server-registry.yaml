@@ -172,12 +172,13 @@ servers:
     source: "internal: packages/servers/infer_mcp"
     roles: [observability, security, compliance]
     transport:
-      type: stdio
-      command: "python"
-      args: ["-m", "servers.infer_mcp"]
+      type: http
+      url: "http://infer-mcp:8007/mcp"
     deployment:
-      kind: local_process
-      notes: "MIGA's own cross-platform fusion engine. Do not modify its internals during the migration; only register it here. Confirm the actual module entrypoint."
+      kind: docker_compose
+      compose_service: infer-mcp
+      ports: ["8007"]
+      notes: "MIGA's own cross-platform fusion engine. Runs as the long-lived `infer-mcp` HTTP service (Dockerfile target `infer`, StreamableHTTP on :8007 via server.py's __main__), NOT as a gateway stdio child: the gateway image deliberately excludes servers/ and the pandas/scipy/scikit-learn stack, and INFER self-advertises endpoint http://infer-mcp:8007. For local non-Docker use, `python -m servers.infer_mcp` still starts a stdio variant."
     env_required: []
     oasf_record: "oasf/records/infer.record.json"
     enabled: true

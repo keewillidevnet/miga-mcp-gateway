@@ -31,6 +31,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any, Optional
 
 from mcp.server.fastmcp import FastMCP
+from starlette.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field
 
 from miga_shared.agntcy import OASFRecord
@@ -390,7 +391,11 @@ INFER_OASF = OASFRecord(
 
 
 @asynccontextmanager
-async def app_lifespan():
+async def app_lifespan(_server: FastMCP):
+    # FastMCP's lifespan_wrapper calls lifespan(server), so this MUST accept the server
+    # argument. Defining it with no parameter raised TypeError per request, which crashed
+    # INFER's stdio startup and made the gateway's INFER fan-out fail with an unhandled
+    # TaskGroup error. (Same root cause as the gateway transport fix.)
     async with miga_lifespan(INFER_OASF, api_factory=None) as state:
         bus: RedisPubSub = state["bus"]
 
@@ -426,8 +431,24 @@ async def app_lifespan():
         yield state
 
 
-mcp = FastMCP("infer_mcp", lifespan=app_lifespan)
+mcp = FastMCP(
+    "infer_mcp",
+    lifespan=app_lifespan,
+    # Bind all interfaces: INFER runs as the `infer-mcp` compose service and the
+    # gateway reaches it over the docker network. FastMCP defaults to 127.0.0.1,
+    # which would only be reachable inside INFER's own container.
+    host="0.0.0.0",
+    port=int(os.getenv("INFER_MCP_PORT", "8007")),
+)
 add_health_tool(mcp, PlatformType.INFER, "infer")
+
+
+@mcp.custom_route("/health", methods=["GET"])
+async def _http_health(_request) -> JSONResponse:
+    """Plain-HTTP health endpoint for the container HEALTHCHECK. FastMCP serves the MCP
+    protocol at /mcp, so a `curl /health` probe 404s without this lightweight route.
+    Mirrors the gateway's /health route. NOTE (cosmetic, not live-verified)."""
+    return JSONResponse({"status": "ok", "service": "infer_mcp"})
 
 # ---------------------------------------------------------------------------
 # Input Models
@@ -709,5 +730,6 @@ async def network_risk_score(params: RiskScoreInput, ctx=None) -> str:
 # ---------------------------------------------------------------------------
 
 if __name__ == "__main__":
-    port = int(os.getenv("INFER_MCP_PORT", "8007"))
-    mcp.run(transport="streamable_http", port=port)
+    # Host and port are set on the FastMCP constructor above (the SDK's FastMCP.run()
+    # does not accept a port kwarg). This serves StreamableHTTP at /mcp on 0.0.0.0:8007.
+    mcp.run(transport="streamable-http")
