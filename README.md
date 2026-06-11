@@ -143,6 +143,10 @@ renders the reply as Markdown or an Adaptive Card.
 | Multi-platform live data | 🔲 Requires platform credentials (separate step) |
 | Automation / HITL approval | 🟡 Partial: the bot acknowledges approve/reject, but releasing a held action on the decision is not yet wired. |
 
+![MIGA Webex bot answering credential-free INFER commands: network risk score, anomaly detection, and root cause analysis](docs/images/webex-credential-free-demo.png)
+
+*Credential-free demo in Webex: INFER returns risk score, anomaly detection, and root cause analysis with no external platform credentials; readings stay empty until platform telemetry flows.*
+
 A credential-free demo exercises INFER plus status with no external platform credentials
 and an ephemeral tunnel for the webhook (no standing host). Dev mode bypasses Entra JWT.
 Full multi-platform operation requires credentials and is a separate step; there is no
