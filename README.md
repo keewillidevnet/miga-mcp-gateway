@@ -14,14 +14,14 @@
 
 > A unified intelligence layer that **aggregates and fuses** AI/ML and operational
 > data from real, published MCP servers across the network ecosystem into a single,
-> consistent, role-based interface for analysis, automation, and decision support —
+> consistent, role-based interface for analysis, automation, and decision support,
 > with a conversational WebEx Chat interface.
 
 ---
 
 ## Overview
 
-Modern enterprise networks span many platforms — Cisco ThousandEyes, Splunk, Cisco
+Modern enterprise networks span many platforms: Cisco ThousandEyes, Splunk, Cisco
 Meraki, Catalyst SD-WAN, Catalyst Center, ISE, ServiceNow, NetBox, and more. Each
 exposes its own MCP server, telemetry, and access model. **MIGA is the aggregation
 and fusion layer over that ecosystem.** Rather than reimplementing platform
@@ -33,8 +33,8 @@ Users interact conversationally through a **WebEx Bot** that embeds an MCP Clien
 converting natural language into structured MCP tool calls via an NLP pipeline, with
 results rendered as rich Adaptive Cards.
 
-The **INFER** (Infrastructure Network Fusion Engine for Reasoning) service — MIGA's
-one original server — continuously ingests the normalized output of the registered
+The **INFER** (Infrastructure Network Fusion Engine for Reasoning) service, MIGA's
+one original server, continuously ingests the normalized output of the registered
 servers to perform predictive analysis, root cause analysis, anomaly correlation,
 and risk scoring across platforms.
 
@@ -97,8 +97,8 @@ Center, ISE, ServiceNow, NetBox) report unreachable until you configure them.
 # Clone the repository
 git clone https://github.com/keewillidevnet/miga-mcp-gateway.git && cd miga-mcp-gateway
 
-# Launch the core gateway + INFER
-docker compose up -d
+# Launch the core stack (gateway, INFER, redis); external platforms are built separately
+docker compose up -d redis gateway infer-mcp
 
 # Check reachability of every registered server
 python -m packages.cli.miga_cli status
@@ -151,46 +151,57 @@ all-8-platform live run claimed here.
 ### Running the bot (credential-free)
 
 ```bash
-# 1. Bring up the core stack (gateway + INFER + redis)
-docker compose up -d
+# ===========================================================
+#  Run the MIGA bot with no external platform credentials
+# ===========================================================
 
-# 2. Start the bot (serves the webhook listener on :9000)
-export MIGA_GATEWAY_URL=http://localhost:8000 MIGA_BOT_GATEWAY_MODE=mcp
-python -m packages.webex_bot.app
+# ---- Prerequisites (do these once) ------------------------
+cloudflared --version            # need a tunnel tool (or: ngrok version)
+# Create a Webex bot at https://developer.webex.com/my-apps (Create a Bot);
+# copy its access token and its bot email (ends in @webex.bot).
+git clone https://github.com/keewillidevnet/miga-mcp-gateway.git
+cd miga-mcp-gateway
+cp .env.example .env
+# Edit .env and set exactly these two values:
+#   WEBEX_BOT_ACCESS_TOKEN=<your bot access token>
+#   WEBEX_BOT_EMAIL=<your bot's @webex.bot email>
+pip install aiohttp httpx mcp    # deps for the local (non-container) processes
 
-# 3. Expose the webhook with an ephemeral tunnel, then register it
-cloudflared tunnel --url http://localhost:9000
-export WEBEX_PUBLIC_URL=https://<your-tunnel>.trycloudflare.com
-python -m packages.webex_bot.register_webhook
-```
+# ---- Option A: one command (recommended) ------------------
+# Brings up the stack, starts the bot, opens the tunnel, and
+# registers the webhook, with preflight checks at each step.
+./scripts/run_demo.sh            # add --mode http if the handshake misbehaves
+# When it prints READY, skip to "Try it" below.
 
-Or run all of it with one command: `scripts/run_demo.sh`. Full walkthrough with live
-evidence in [docs/BOT_DEMO.md](docs/BOT_DEMO.md).
+# ---- Option B: manual, step by step (two terminals) -------
+# Terminal 1 - stack + bot (leave running):
+docker compose up -d redis gateway infer-mcp
+# Wait for INFER to come up (a few seconds after 'up -d'), then probe:
+until docker compose exec gateway curl -sf http://infer-mcp:8007/health; do sleep 2; done
+# -> {"status":"ok","service":"infer_mcp"}
+set -a; source .env; set +a
+export MIGA_GATEWAY_URL=http://localhost:8000
+export MIGA_BOT_GATEWAY_MODE=mcp
+python -m packages.webex_bot.app                                    # serves :9000; leave running
 
-## Project Structure
+# Terminal 2 - tunnel + webhook:
+cloudflared tunnel --url http://localhost:9000 > /tmp/miga-tunnel.log 2>&1 &
+sleep 6
+grep -o 'https://[a-z0-9-]*\.trycloudflare\.com' /tmp/miga-tunnel.log   # copy the URL it prints
+set -a; source .env; set +a
+export WEBEX_PUBLIC_URL=<paste-the-https-URL-above>
+python -m packages.webex_bot.register_webhook                          # expect: webhooks created
 
-```
-miga-mcp-gateway/
-├── config/
-│   ├── server-registry.yaml         # Authoritative: how the gateway connects to each server
-│   └── server-registry.schema.json  # JSON schema the registry is validated against
-├── oasf/
-│   ├── OASF_RECORDS.md              # OASF record authoring guide
-│   └── records/*.record.json        # One OASF capability record per registered server
-├── miga_shared/
-│   ├── registry.py                  # Registry loader (parse, validate, resolve ${ENV})
-│   ├── transport.py                 # MCP client transport: HTTP/SSE + stdio (docker run -i)
-│   └── ...                          # auth, AGNTCY, models, formatters
-├── packages/
-│   ├── gateway/                     # Gateway MCP Server (registry-driven role routing)
-│   ├── webex_bot/                   # WebEx Bot (NLP + MCP Client + Adaptive Cards)
-│   └── cli/                         # miga-cli tool
-├── servers/
-│   └── infer_mcp/                   # INFER fusion engine — MIGA's only original server
-├── helm/miga/                       # Helm chart (gateway, bot, INFER)
-├── docs/                            # Documentation
-├── docker-compose.yml               # Local cluster (core + compose servers)
-└── .env.example                     # Environment template (every registry env var)
+# ---- Try it (type these in Webex, not the shell) ----------
+#   help
+#   gateway status      # live data immediately
+#   network status      # live data immediately
+#   risk score          # runs; reads 0/100 until telemetry flows
+
+# ---- Teardown ---------------------------------------------
+kill %1                 # Terminal 2: stop the tunnel
+# Terminal 1: Ctrl-C the bot, then:
+docker compose down
 ```
 
 ## Platform Coverage
@@ -244,11 +255,11 @@ Splunk returns active detections from the SIEM, and Meraki flags anomalous appli
 
 > **Analyst:** `risk score`
 
-INFER calculates a composite **78/100** — the top contributor is an endpoint with repeated authentication failures correlated against a Splunk alert.
+INFER calculates a composite **78/100**: the top contributor is an endpoint with repeated authentication failures correlated against a Splunk alert.
 
 > **Analyst:** `quarantine endpoint AA:BB:CC:DD:EE:01`
 
-An approval card fires to the security lead. One tap — Cisco ISE isolates the device. The entire **triage-to-containment loop** happened in a WebEx space without touching a single console.
+An approval card fires to the security lead. One tap, and Cisco ISE isolates the device. The entire **triage-to-containment loop** happened in a WebEx space without touching a single console.
 
 ---
 
@@ -276,7 +287,7 @@ Cisco ISE returns endpoint posture stats, NetBox supplies source-of-truth invent
 
 INFER detects a correlated branch outage across ThousandEyes, Meraki, and Catalyst Center:
 
-> **MIGA Bot:** 🔴 **Correlated incident detected:** WAN degradation at Site-A — 3 platforms affected, root cause: upstream circuit CKT-00412 packet loss.
+> **MIGA Bot:** 🔴 **Correlated incident detected:** WAN degradation at Site-A, 3 platforms affected, root cause: upstream circuit CKT-00412 packet loss.
 
 The bot auto-creates a ServiceNow P1 incident with the full RCA attached.
 
@@ -284,9 +295,9 @@ The bot auto-creates a ServiceNow P1 incident with the full RCA attached.
 
 The bot pulls the live ticket: assigned to Network Operations, provider ticket open.
 
-> **Engineer:** `resolve INC0078432 — Lumen fiber repair completed, circuit stable`
+> **Engineer:** `resolve INC0078432: Lumen fiber repair completed, circuit stable`
 
-MIGA updates the ServiceNow ticket with resolution notes, INFER confirms health scores recovered, and the incident closes. **Full lifecycle — detection to resolution — in one WebEx thread.**
+MIGA updates the ServiceNow ticket with resolution notes, INFER confirms health scores recovered, and the incident closes. **Full lifecycle, detection to resolution, in one WebEx thread.**
 
 ---
 
@@ -296,7 +307,7 @@ INFER flags an anomaly on `10.1.50.1`. Without NetBox, that's just an IP address
 
 > **Engineer:** `what is 10.1.50.1?`
 
-NetBox resolves it: **Core Switch 3** — Catalyst 9300-48P, Rack 14, Building C, serial FCW2345L0AB, running IOS-XE 17.09.04a.
+NetBox resolves it: **Core Switch 3**: Catalyst 9300-48P, Rack 14, Building C, serial FCW2345L0AB, running IOS-XE 17.09.04a.
 
 > **Engineer:** `what's the blast radius?`
 
@@ -312,10 +323,10 @@ framework (Linux Foundation). Honest status of each capability:
 | Capability | Status | Detail |
 |------------|--------|--------|
 | OASF capability records | ✅ **Implemented** (verified live) | One record per server under `oasf/records/*.record.json`; all 9 validate against the OASF **1.0.0** schema server (0 errors / 0 warnings). |
-| Directory publication | ✅ **Implemented** (verified live) | At startup the gateway publishes **9/9** records to a real AGNTCY Directory (`dir-apiserver`) via the **`agntcy-dir` 1.3.0 SDK** — each returns a content-addressed **CID**; records **pull back by CID** at `schema_version` 1.0.0. Best-effort: falls back to standalone if the directory is down. |
+| Directory publication | ✅ **Implemented** (verified live) | At startup the gateway publishes **9/9** records to a real AGNTCY Directory (`dir-apiserver`) via the **`agntcy-dir` 1.3.0 SDK**, each returns a content-addressed **CID**; records **pull back by CID** at `schema_version` 1.0.0. Best-effort: falls back to standalone if the directory is down. |
 | Registry-driven routing | ✅ **Implemented** | Routing comes entirely from `config/server-registry.yaml` (loaded at startup + periodically reloaded); add a server and it's picked up with no code change. |
 | Directory-search routing discovery | 🟢 **Implemented** (opt-in; verified live) | With `MIGA_DISCOVERY_ROUTING=1` the gateway resolves each role's servers via a live directory search (skills to records to `miga_registry_ref` to registry connection). The static registry is the default and the guaranteed fallback. In a single-instance deployment the search rediscovers MIGA's own published records; multi-party discovery lands under federation. See `DISCOVERY_VERIFY.md`. |
-| Identity / Agent Badges | 🔲 **Planned** | `IdentityBadge` is a scaffold only — no cryptographic signing or verification. |
+| Identity / Agent Badges | 🔲 **Planned** | `IdentityBadge` is a scaffold only; no cryptographic signing or verification. |
 | SLIM (v2) messaging | 🔲 **Planned** | Inter-service messaging is Redis pub/sub today; quantum-safe AGNTCY SLIM is future. |
 | Observability (v2) | 🔲 **Planned** | No OpenTelemetry tracing wired. |
 
@@ -325,7 +336,7 @@ framework (Linux Foundation). Honest status of each capability:
 > `VERIFY_DIRECTORY.md`.
 
 **What is real and load-bearing:** a registry-driven gateway fronting 8 real external
-MCP servers plus INFER, with a validated OASF 1.0.0 capability record per server — now
+MCP servers plus INFER, with a validated OASF 1.0.0 capability record per server, now
 also published to a real AGNTCY Directory.
 
 ## Deployment
@@ -339,6 +350,32 @@ helm install miga ./helm/miga --namespace miga --create-namespace
 (The Helm chart deploys the gateway, WebEx bot, and INFER. External platform servers are
 provisioned out-of-band and referenced via the registry.)
 
+## Project Structure
+
+```
+miga-mcp-gateway/
+├── config/
+│   ├── server-registry.yaml         # Authoritative: how the gateway connects to each server
+│   └── server-registry.schema.json  # JSON schema the registry is validated against
+├── oasf/
+│   ├── OASF_RECORDS.md              # OASF record authoring guide
+│   └── records/*.record.json        # One OASF capability record per registered server
+├── miga_shared/
+│   ├── registry.py                  # Registry loader (parse, validate, resolve ${ENV})
+│   ├── transport.py                 # MCP client transport: HTTP/SSE + stdio (docker run -i)
+│   └── ...                          # auth, AGNTCY, models, formatters
+├── packages/
+│   ├── gateway/                     # Gateway MCP Server (registry-driven role routing)
+│   ├── webex_bot/                   # WebEx Bot (NLP + MCP Client + Adaptive Cards)
+│   └── cli/                         # miga-cli tool
+├── servers/
+│   └── infer_mcp/                   # INFER fusion engine — MIGA's only original server
+├── helm/miga/                       # Helm chart (gateway, bot, INFER)
+├── docs/                            # Documentation
+├── docker-compose.yml               # Local cluster (core + compose servers)
+└── .env.example                     # Environment template (every registry env var)
+```
+
 ## Contributing
 
 To add a platform: add an entry to `config/server-registry.yaml`, author its OASF
@@ -347,4 +384,4 @@ record under `oasf/records/`, and wire any env vars in `.env.example`. See
 
 ## License
 
-Apache 2.0 — See [LICENSE](LICENSE)
+Apache 2.0. See [LICENSE](LICENSE)
