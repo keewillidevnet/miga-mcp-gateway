@@ -89,24 +89,44 @@ hardcoded.
 
 ## Quick Start
 
+MIGA runs end to end with no external platform credentials. The gateway and INFER run
+locally; the eight external platforms (ThousandEyes, Splunk, Meraki, SD-WAN, Catalyst
+Center, ISE, ServiceNow, NetBox) report unreachable until you configure them.
+
 ```bash
 # Clone the repository
 git clone https://github.com/keewillidevnet/miga-mcp-gateway.git && cd miga-mcp-gateway
 
-# Copy environment template and add your credentials (grouped by platform)
-cp .env.example .env
-
-# Build the external community server images referenced by docker-compose
-# (Meraki, ISE, NetBox, SD-WAN) from their upstream repos — see MIGRATION.md.
-
-# Launch core + compose-deployed servers
+# Launch the core gateway + INFER
 docker compose up -d
 
-# Check status (reachability of every registered server)
+# Check reachability of every registered server
 python -m packages.cli.miga_cli status
-
-# Open WebEx and message the MIGA bot!
 ```
+
+Then open WebEx and message the MIGA bot. These commands return real output with no
+credentials:
+
+| Command | What it does | Without credentials |
+|---|---|---|
+| `help` | Capability menu | Full menu |
+| `gateway status` | Gateway health and routing table | Real data |
+| `network status` | Per-server reachability | INFER reachable; the eight platforms unreachable |
+| `risk score` | INFER composite risk | Runs; reads 0/100 until telemetry flows |
+| `correlate events` | INFER event correlation | Runs; empty until telemetry flows |
+| `root cause analysis` | INFER root cause | Runs; empty until telemetry flows |
+| `any anomalies?` | INFER anomaly detection | Runs; empty until telemetry flows |
+| `predict failures` | INFER predictive analysis | Runs; empty until telemetry flows |
+
+The INFER commands return real, structured output immediately. Scores and findings stay
+empty until the external platforms are configured and feed telemetry into INFER. See
+`docs/BOT_DEMO.md` for a full credential-free walkthrough with live evidence.
+
+To bring up the eight external platforms: copy the environment template and add
+credentials grouped by platform (`cp .env.example .env`), then build the external
+community server images referenced by docker-compose (Meraki, ISE, NetBox, SD-WAN) from
+their upstream repos. See `MIGRATION.md`. Everything in Use Case Scenarios below assumes
+the platforms are configured this way.
 
 ## Project Structure
 
@@ -150,34 +170,6 @@ engine. Connection details for every row live in `config/server-registry.yaml`.
 | ServiceNow | Community | [echelon-ai-labs/servicenow-mcp](https://github.com/echelon-ai-labs/servicenow-mcp) (stdio) | Automation, Observability |
 | NetBox | Official (NetBox Labs) | [netboxlabs/netbox-mcp-server](https://github.com/netboxlabs/netbox-mcp-server) (read-only) | Configuration, Compliance |
 | INFER | MIGA-original | `servers/infer_mcp` | Observability, Security, Compliance |
-
-## Quick Start (credential-free)
-
-MIGA runs end to end with no external platform credentials. The gateway and INFER
-run locally; the eight external platforms (ThousandEyes, Splunk, Meraki, SD-WAN,
-Catalyst Center, ISE, ServiceNow, NetBox) report unreachable until you configure them.
-
-docker compose up -d
-
-Then message the bot in WebEx. These commands return real output with no credentials:
-
-| Command | What it does | Without credentials |
-|---|---|---|
-| `help` | Capability menu | Full menu |
-| `gateway status` | Gateway health and routing table | Real data |
-| `network status` | Per-server reachability | INFER reachable; the eight platforms unreachable |
-| `risk score` | INFER composite risk | Runs; reads 0/100 until telemetry flows |
-| `correlate events` | INFER event correlation | Runs; empty until telemetry flows |
-| `root cause analysis` | INFER root cause | Runs; empty until telemetry flows |
-| `any anomalies?` | INFER anomaly detection | Runs; empty until telemetry flows |
-| `predict failures` | INFER predictive analysis | Runs; empty until telemetry flows |
-
-The INFER commands return real, structured output immediately. The scores and findings
-stay empty until the external platforms are configured and feed telemetry into INFER.
-See `docs/BOT_DEMO.md` for a full credential-free walkthrough with live evidence.
-
-Everything in Use Case Scenarios below assumes the external platforms are configured
-with credentials.
 
 ## Use Case Scenarios
 
@@ -319,22 +311,14 @@ all-8-platform live run claimed here.
 
 ## Deployment
 
-**Local Development (Docker Compose):**
-```bash
-docker compose up -d
-```
+For local development, see [Quick Start](#quick-start).
 
 **Production (Kubernetes + Helm):**
 ```bash
 helm install miga ./helm/miga --namespace miga --create-namespace
 ```
-(The Helm chart deploys the gateway, WebEx bot, and INFER. External platform
-servers are provisioned out-of-band and referenced via the registry.)
-
-**CLI Tool:**
-```bash
-python -m packages.cli.miga_cli status
-```
+(The Helm chart deploys the gateway, WebEx bot, and INFER. External platform servers are
+provisioned out-of-band and referenced via the registry.)
 
 ## Contributing
 
