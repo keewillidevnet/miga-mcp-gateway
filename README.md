@@ -128,6 +128,26 @@ community server images referenced by docker-compose (Meraki, ISE, NetBox, SD-WA
 their upstream repos. See `MIGRATION.md`. Everything in Use Case Scenarios below assumes
 the platforms are configured this way.
 
+## WebEx Bot
+
+The WebEx bot is a conversational interface to the gateway: rule-based NLP turns a
+message into a gateway tool call (the bot embeds an MCP client over streamable-http) and
+renders the reply as Markdown or an Adaptive Card.
+
+| Capability | Status |
+|------------|--------|
+| Conversational interface (NLP -> gateway -> WebEx) | ✅ Implemented |
+| MCP client to the gateway (streamable-http) | ✅ Implemented (internal HTTP dev fallback available) |
+| Webhook self-registration | ✅ Implemented (`python -m packages.webex_bot.register_webhook`) |
+| Credential-free live demo (INFER + `network_status` + `gateway_health`) | ✅ Implemented; see [docs/BOT_DEMO.md](docs/BOT_DEMO.md). Not live-verified in this repo. |
+| Multi-platform live data | 🔲 Requires platform credentials (separate step) |
+| Automation / HITL approval | 🟡 Partial: the bot acknowledges approve/reject, but releasing a held action on the decision is not yet wired. |
+
+A credential-free demo exercises INFER plus status with no external platform credentials
+and an ephemeral tunnel for the webhook (no standing host). Dev mode bypasses Entra JWT.
+Full multi-platform operation requires credentials and is a separate step; there is no
+all-8-platform live run claimed here.
+
 ## Project Structure
 
 ```
@@ -288,26 +308,6 @@ framework (Linux Foundation). Honest status of each capability:
 **What is real and load-bearing:** a registry-driven gateway fronting 8 real external
 MCP servers plus INFER, with a validated OASF 1.0.0 capability record per server — now
 also published to a real AGNTCY Directory.
-
-## WebEx Bot
-
-The WebEx bot is a conversational interface to the gateway: rule-based NLP turns a
-message into a gateway tool call (the bot embeds an MCP client over streamable-http) and
-renders the reply as Markdown or an Adaptive Card.
-
-| Capability | Status |
-|------------|--------|
-| Conversational interface (NLP -> gateway -> WebEx) | ✅ Implemented |
-| MCP client to the gateway (streamable-http) | ✅ Implemented (internal HTTP dev fallback available) |
-| Webhook self-registration | ✅ Implemented (`python -m packages.webex_bot.register_webhook`) |
-| Credential-free live demo (INFER + `network_status` + `gateway_health`) | ✅ Implemented; see [docs/BOT_DEMO.md](docs/BOT_DEMO.md). Not live-verified in this repo. |
-| Multi-platform live data | 🔲 Requires platform credentials (separate step) |
-| Automation / HITL approval | 🟡 Partial: the bot acknowledges approve/reject, but releasing a held action on the decision is not yet wired. |
-
-A credential-free demo exercises INFER plus status with no external platform credentials
-and an ephemeral tunnel for the webhook (no standing host). Dev mode bypasses Entra JWT.
-Full multi-platform operation requires credentials and is a separate step; there is no
-all-8-platform live run claimed here.
 
 ## Deployment
 
