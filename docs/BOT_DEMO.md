@@ -1,131 +1,159 @@
-# BOT_DEMO.md: credential-free WebEx live demo
+# MIGA WebEx Bot, Credential-Free Demo
 
-Goal: a WebEx message produces a real MIGA gateway response end to end, using only INFER
-plus `network_status` plus `gateway_health`, with no external platform credentials and no
-standing host. An ephemeral tunnel covers the webhook for the demo session.
+## What this proves
 
-Status: implemented, NOT live-verified in this workspace (no Docker, no WebEx token, no
-tunnel here). Run the steps on a networked Mac. Dev mode bypasses Entra JWT, so no Entra
-credentials are needed. The tunnel is ephemeral per demo, not hosting.
+The WebEx bot talks to the MIGA gateway over MCP, and the gateway routes to INFER, with no external platform credentials. INFER and the gateway status tools return real data. The eight external platforms (ThousandEyes, Splunk, Meraki, Catalyst SD-WAN, Catalyst Center, ISE, ServiceNow, NetBox) report unreachable because they are not configured, which is the honest credential-free baseline.
 
-## Fast path: one command
-On the Mac, `./scripts/run_demo.sh` collapses the manual steps below into one command. It
-runs the live ops (you only author it elsewhere): preflight, `docker compose up -d`, start
-the bot, open an ephemeral tunnel (cloudflared preferred, else ngrok), register the Webex
-webhook, and print the messages to send. After it prints READY, send these in a direct 1:1
-message to the bot: `help`, `gateway status`, `network status`, `risk score`,
-`root cause analysis`.
+## Path
 
-```bash
-cp .env.example .env     # set WEBEX_BOT_ACCESS_TOKEN, WEBEX_BOT_EMAIL, MIGA_ENV=development
-./scripts/run_demo.sh                # default: MCP streamable-http client
-./scripts/run_demo.sh --mode http    # re-run with the internal HTTP fallback if the
-                                      # streamable-http handshake misbehaves
-./scripts/run_demo.sh --down         # also 'docker compose down' at teardown
 ```
-Run artifacts (health checks, bot log, webhook ids) are written to `demo-evidence/<timestamp>/`
-(gitignored). Ctrl-C stops the bot and the tunnel; the stack stays up unless `--down`.
-
-The detailed manual steps below are the fallback if you want to run each stage by hand.
-
-## What works without platform credentials
-Commands below are the actual phrases the rule-based NLP (`packages/webex_bot/nlp`)
-recognizes. "Real" means the gateway returns a genuine response with no platform creds.
-
-| You type | Routes to | Credential-free result |
-|----------|-----------|------------------------|
-| `help` / `what can you do` | local `format_help()` | Capability list. No gateway call. |
-| `network status` / `how's the network?` / `is the network ok?` | `network_status` | Real: reachability of all 9 registered servers (INFER reachable; external servers report unreachable until you add their creds/images). |
-| `gateway health` / `gateway status` / `miga status` | `gateway_health` | Real: gateway uptime, routing table, per-server transport/roles. |
-| `risk score` | `compliance` -> INFER | Real: INFER network risk score (low on a fresh start). |
-| `run correlation` / `root cause analysis` / `rca` | `observability` -> INFER | Real: INFER correlation result ("no correlated events" on a fresh start). |
-| `predict failures` | `observability` -> INFER | Real: INFER prediction result. |
-| `any anomalies?` / `unusual traffic` | `observability` -> INFER | Real: INFER anomaly result. |
-| `show me network health` | `observability` (fan out) | Partial: INFER answers; the external observability servers report unreachable. |
-
-INFER needs no credentials, so its tools answer for real. On a fresh stack the event
-buffer is empty, so INFER honestly reports "no events / low risk." That is a real
-gateway response, which is the point of the credential-free demo.
-
-## What needs credentials (will report unreachable)
-These help-text examples target external platforms and only return platform data once you
-add that platform's credentials (and build its image): `meraki health`,
-`catalyst center issues`, `thousandeyes status`, `list devices`, `posture status`,
-`active sessions`. Some help-text examples (`xdr threats`, `hypershield`, firewall) name
-platforms that were dropped from the registry and are not registered servers.
-
-## Steps
-
-### 1. Create the WebEx bot, token, and a test space
-At <https://developer.webex.com>: create a Bot, copy its access token and bot email, then
-create a space (room) and add the bot to it.
-
-### 2. Fill .env (no platform credentials)
-```bash
-cp .env.example .env
-# set:
-#   WEBEX_BOT_ACCESS_TOKEN=<bot token>
-#   WEBEX_BOT_EMAIL=<bot email, e.g. miga-bot@webex.bot>
-#   MIGA_ENV=development            # dev mode bypasses Entra JWT auth
-#   MIGA_GATEWAY_URL=http://localhost:8000
-#   MIGA_BOT_GATEWAY_MODE=mcp       # primary MCP client path; use http only if needed
-# leave all 8 platform credential blocks empty.
+Webex message
+  -> webhook (messages/created)
+  -> tunnel (public URL -> localhost:9000)
+  -> bot (host process, aiohttp on :9000)
+  -> MCP streamable-http client
+  -> gateway (FastMCP on :8000, /mcp)
+  -> INFER over HTTP (infer-mcp:8007)
 ```
 
-### 3. Bring up the local stack
+`gateway_health`, `network_status`, and the INFER tools need no credentials.
+
+## Prerequisites
+
+- A Webex bot from developer.webex.com, token in `.env` as `WEBEX_BOT_ACCESS_TOKEN`.
+- Docker running `gateway`, `infer-mcp`, and `redis`.
+- The bot running on the host in `mcp` mode.
+- A tunnel exposing the bot's `:9000`, with the webhooks registered against it.
+
+## Run it
+
+Bring up the gateway and INFER, and confirm the gateway can reach INFER across the Docker network:
+
 ```bash
-docker compose up -d            # gateway + INFER + redis (+ the directory stack if present)
-curl -fsS http://localhost:8000/health   # {"status":"ok","service":"miga_gateway"}
+docker compose up -d --no-deps gateway infer-mcp
+docker compose exec gateway curl -sf http://infer-mcp:8007/health
+# -> {"status":"ok","service":"infer_mcp"}
 ```
 
-### 4. Start the bot on :9000
+Start the bot on the host:
+
 ```bash
-python -m packages.webex_bot.app
-curl -fsS http://localhost:9000/health   # {"service":"miga_webex_bot","status":"healthy"}
+set -a; . ./.env; set +a
+export MIGA_GATEWAY_URL=http://localhost:8000 MIGA_BOT_GATEWAY_MODE=mcp
+python -m packages.webex_bot.app          # serves aiohttp on :9000
 ```
 
-### 5. Run an ephemeral tunnel for the webhook
-```bash
-ngrok http 9000            # or: cloudflared tunnel --url http://localhost:9000
-# copy the https forwarding URL, e.g. https://abc123.ngrok-free.app
-```
+Expose it and register the webhooks:
 
-### 6. Register the webhook
 ```bash
-export WEBEX_PUBLIC_URL=https://abc123.ngrok-free.app
+cloudflared tunnel --url http://localhost:9000
+export WEBEX_PUBLIC_URL=https://<your-tunnel>.trycloudflare.com
 python -m packages.webex_bot.register_webhook
-# idempotently deletes old MIGA webhooks and creates messages/created and
-# attachmentActions/created -> <WEBEX_PUBLIC_URL>/webhooks/webex
 ```
 
-### 7. Message the bot and confirm real replies
-In the space, send (the bot ignores its own messages; in a group space, mention it):
+`scripts/run_demo.sh` orchestrates the stack, bot, tunnel, and webhook in one command.
+
+## Credential-free intents
+
+| Phrase | Tool | Needs credentials |
+|---|---|---|
+| `help` | local | no |
+| `gateway status` | gateway_health | no |
+| `network status` | network_status | no |
+| `risk score` | INFER network risk score | no |
+| `root cause analysis` | INFER root cause | no |
+| `run correlation` | INFER event correlation | no |
+| `any anomalies?` | INFER anomaly detection | no |
+| `predict failures` | INFER predictive analysis | no |
+
+The eight external platform tools require real platform credentials and report unreachable without them.
+
+## Live evidence
+
+Captured from a live run against the Dockerized stack with no external platform credentials. `help` returns the capability menu (omitted here for length).
+
+### `gateway status`
+
 ```
-network status
-gateway status
-risk score
-root cause analysis
+## MIGA — Gateway Health
+
+🟢 Healthy — miga_gateway v1.0.0
+Registered servers: 9
+
+- thousandeyes    — http  · observability
+- splunk          — http  · observability, security
+- meraki          — http  · observability, configuration, security
+- sdwan           — stdio · configuration, automation
+- catalyst_center — stdio · observability, configuration, automation
+- ise             — http  · identity, compliance
+- servicenow      — stdio · automation, observability
+- netbox          — http  · configuration, compliance
+- infer           — http  · observability, security, compliance
 ```
-Expect a real reachability summary, a gateway health JSON, and INFER responses. Capture
-the transcript as evidence.
 
-## Gateway transport note
-The bot calls the gateway as an MCP client over streamable-http (`MIGA_BOT_GATEWAY_MODE=mcp`,
-the default). If the streamable-http handshake misbehaves in your environment, set
-`MIGA_BOT_GATEWAY_MODE=http` to use the gateway's internal dev fallback route
-(`POST /internal/call`, development mode and loopback/private only). The fallback is a dev
-convenience for a single demo session, not a replacement for the MCP client.
+### `network status`
 
-## Honesty
-- HITL approval release is not wired (the bot acknowledges approve/reject but no consumer
-  holds and releases a pending action). The credential-free demo is read-only and does not
-  exercise it. README marks automation/approval as partial.
-- This demo exercises INFER plus status. A full multi-platform live run requires platform
-  credentials and is a separate step. There is no all-8-platform live run here.
+```
+MIGA — Network Status Overview
+Registered Servers: 9
 
-## Evidence (fill after running on the Mac)
-- [ ] `network status` reply (paste transcript):
-- [ ] `gateway status` reply:
-- [ ] `risk score` / `root cause analysis` INFER reply:
-- [ ] WebEx webhook ids from register_webhook:
-- [ ] Tunnel URL used (ephemeral):
+🔴 Cisco ThousandEyes (thousandeyes) — unreachable
+🔴 Splunk (Cisco) (splunk) — unreachable
+🔴 Cisco Meraki (meraki) — unreachable
+🔴 Cisco Catalyst SD-WAN (vManage) (sdwan) — unreachable
+🔴 Cisco Catalyst Center (catalyst_center) — unreachable
+🔴 Cisco Identity Services Engine (ise) — unreachable
+🔴 ServiceNow ITSM (servicenow) — unreachable
+🔴 NetBox (NetBox Labs) (netbox) — unreachable
+🟢 INFER (Infrastructure Network Fusion Engine for Reasoning) (infer) — reachable
+```
+
+### `risk score`
+
+```
+## INFER — Network Risk Score
+
+🟢 0/100 — LOW
+
+Score Breakdown:
+- Events (last 1h): 0/60 (0 events)
+- Anomalies: 0/20
+- Predictions: 0/20
+
+Active Platforms: 0
+Event Buffer Size: 0
+Historical Incidents: 0
+```
+
+### `root cause analysis`
+
+```
+## INFER — Root Cause Analysis
+
+✅ No correlated event groups to analyze.
+```
+
+### `any anomalies?`
+
+```
+## INFER — Anomaly Detection
+
+✅ No anomalies detected in the last 60 minutes.
+```
+
+### `predict failures`
+
+```
+## INFER — Predictive Analysis
+
+✅ No failure predictions based on current 30m event window.
+```
+
+The empty baselines (0/100 LOW, no anomalies, no predictions) are correct: no telemetry has been published into INFER's event buffer in this run.
+
+## Notes and scope
+
+- INFER runs as its own HTTP compose service (`infer-mcp:8007`), not a gateway stdio child. The gateway routes to it over the registry's `http` transport.
+- `gateway depends_on infer-mcp` with `service_started`, so a slow or unhealthy INFER never blocks gateway startup; `gateway status` and `network status` respond regardless.
+- The eight external platforms need real credentials for a live run. This demo proves the credential-free path: INFER plus gateway status.
+- Webex ingress here uses a webhook over a tunnel. A websocket-based ingress that needs no public URL is a planned follow-up.
