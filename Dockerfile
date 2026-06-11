@@ -89,6 +89,8 @@ RUN pip install --no-cache-dir \
     scipy>=1.11.0 \
     scikit-learn>=1.3.0
 
+# Copy the package marker so `servers` is a regular package, then INFER itself.
+COPY servers/__init__.py /app/servers/__init__.py
 COPY servers/infer_mcp/ /app/servers/infer_mcp/
 
 ENV INFER_MCP_PORT=8007

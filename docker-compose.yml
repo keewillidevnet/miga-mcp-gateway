@@ -161,6 +161,11 @@ services:
     depends_on:
       redis:
         condition: service_healthy
+      infer-mcp:
+        # INFER is a downstream MCP server the gateway reaches over HTTP
+        # (registry: http://infer-mcp:8007/mcp). service_started (not service_healthy)
+        # so a slow/unhealthy INFER never blocks the gateway from starting.
+        condition: service_started
     volumes:
       # SECURITY: mounting the Docker socket grants the gateway root-equivalent
       # control of the host. It is required only so the gateway can spawn the
