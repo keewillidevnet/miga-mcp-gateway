@@ -246,6 +246,63 @@ async def _http_health(_request) -> JSONResponse:
     return JSONResponse({"status": "ok", "service": "miga_gateway"})
 
 
+def _serialize_tool_result(result: Any) -> list[dict[str, str]]:
+    """Flatten a FastMCP ``call_tool`` result (Sequence[ContentBlock] | dict) into
+    MCP-shaped text content blocks."""
+    if isinstance(result, dict):
+        return [{"type": "text", "text": json.dumps(result, default=str)}]
+    blocks: list[dict[str, str]] = []
+    for block in result or []:
+        text = getattr(block, "text", None)
+        if text is not None:
+            blocks.append({"type": "text", "text": text})
+    return blocks
+
+
+@mcp.custom_route("/internal/call", methods=["POST"])
+async def _internal_call(request) -> JSONResponse:
+    """Dev-only internal fallback. POST {"tool", "arguments"} -> invoke the tool and
+    return MCP-shaped {"content": [{"type": "text", "text": ...}]}.
+
+    The MCP streamable-http client is the PRIMARY path the WebEx bot uses (the bot is an
+    MCP client). This route exists ONLY so a single demo session can still succeed if the
+    streamable-http handshake misbehaves in the operator's environment. It is a dev
+    convenience and fallback, not a replacement for the MCP client and not a claim that
+    the bot is not an MCP client. Guarded to development mode and loopback/private callers
+    so it cannot be reached from the public internet.
+    """
+    import ipaddress
+
+    if os.getenv("MIGA_ENV", "development") != "development":
+        return JSONResponse(
+            {"error": "internal route disabled outside development"}, status_code=403
+        )
+    host = request.client.host if request.client else ""
+    try:
+        ok_local = (
+            host == ""
+            or ipaddress.ip_address(host).is_loopback
+            or ipaddress.ip_address(host).is_private
+        )
+    except ValueError:
+        ok_local = host in ("localhost", "")
+    if not ok_local:
+        return JSONResponse({"error": "internal route is loopback/private only"}, status_code=403)
+    try:
+        body = await request.json()
+    except Exception:  # noqa: BLE001 - malformed body
+        return JSONResponse({"error": "invalid json body"}, status_code=400)
+    tool = body.get("tool")
+    arguments = body.get("arguments") or {}
+    if not tool:
+        return JSONResponse({"error": "missing 'tool'"}, status_code=400)
+    try:
+        result = await mcp.call_tool(tool, arguments)
+    except Exception as exc:  # noqa: BLE001 - dev convenience: return error as text, never 500
+        return JSONResponse({"content": [{"type": "text", "text": f"tool error: {exc}"}]})
+    return JSONResponse({"content": _serialize_tool_result(result)})
+
+
 # ---------------------------------------------------------------------------
 # Input Models for Meta-Tools
 # ---------------------------------------------------------------------------
