@@ -8,6 +8,26 @@ Status: implemented, NOT live-verified in this workspace (no Docker, no WebEx to
 tunnel here). Run the steps on a networked Mac. Dev mode bypasses Entra JWT, so no Entra
 credentials are needed. The tunnel is ephemeral per demo, not hosting.
 
+## Fast path: one command
+On the Mac, `./scripts/run_demo.sh` collapses the manual steps below into one command. It
+runs the live ops (you only author it elsewhere): preflight, `docker compose up -d`, start
+the bot, open an ephemeral tunnel (cloudflared preferred, else ngrok), register the Webex
+webhook, and print the messages to send. After it prints READY, send these in a direct 1:1
+message to the bot: `help`, `gateway status`, `network status`, `risk score`,
+`root cause analysis`.
+
+```bash
+cp .env.example .env     # set WEBEX_BOT_ACCESS_TOKEN, WEBEX_BOT_EMAIL, MIGA_ENV=development
+./scripts/run_demo.sh                # default: MCP streamable-http client
+./scripts/run_demo.sh --mode http    # re-run with the internal HTTP fallback if the
+                                      # streamable-http handshake misbehaves
+./scripts/run_demo.sh --down         # also 'docker compose down' at teardown
+```
+Run artifacts (health checks, bot log, webhook ids) are written to `demo-evidence/<timestamp>/`
+(gitignored). Ctrl-C stops the bot and the tunnel; the stack stays up unless `--down`.
+
+The detailed manual steps below are the fallback if you want to run each stage by hand.
+
 ## What works without platform credentials
 Commands below are the actual phrases the rule-based NLP (`packages/webex_bot/nlp`)
 recognizes. "Real" means the gateway returns a genuine response with no platform creds.
