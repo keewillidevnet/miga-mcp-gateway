@@ -14,14 +14,14 @@
 
 > A unified intelligence layer that **aggregates and fuses** AI/ML and operational
 > data from real, published MCP servers across the network ecosystem into a single,
-> consistent, role-based interface for analysis, automation, and decision support —
+> consistent, role-based interface for analysis, automation, and decision support,
 > with a conversational WebEx Chat interface.
 
 ---
 
 ## Overview
 
-Modern enterprise networks span many platforms — Cisco ThousandEyes, Splunk, Cisco
+Modern enterprise networks span many platforms: Cisco ThousandEyes, Splunk, Cisco
 Meraki, Catalyst SD-WAN, Catalyst Center, ISE, ServiceNow, NetBox, and more. Each
 exposes its own MCP server, telemetry, and access model. **MIGA is the aggregation
 and fusion layer over that ecosystem.** Rather than reimplementing platform
@@ -33,8 +33,8 @@ Users interact conversationally through a **WebEx Bot** that embeds an MCP Clien
 converting natural language into structured MCP tool calls via an NLP pipeline, with
 results rendered as rich Adaptive Cards.
 
-The **INFER** (Infrastructure Network Fusion Engine for Reasoning) service — MIGA's
-one original server — continuously ingests the normalized output of the registered
+The **INFER** (Infrastructure Network Fusion Engine for Reasoning) service, MIGA's
+one original server, continuously ingests the normalized output of the registered
 servers to perform predictive analysis, root cause analysis, anomaly correlation,
 and risk scoring across platforms.
 
@@ -255,11 +255,11 @@ Splunk returns active detections from the SIEM, and Meraki flags anomalous appli
 
 > **Analyst:** `risk score`
 
-INFER calculates a composite **78/100** — the top contributor is an endpoint with repeated authentication failures correlated against a Splunk alert.
+INFER calculates a composite **78/100**: the top contributor is an endpoint with repeated authentication failures correlated against a Splunk alert.
 
 > **Analyst:** `quarantine endpoint AA:BB:CC:DD:EE:01`
 
-An approval card fires to the security lead. One tap — Cisco ISE isolates the device. The entire **triage-to-containment loop** happened in a WebEx space without touching a single console.
+An approval card fires to the security lead. One tap, and Cisco ISE isolates the device. The entire **triage-to-containment loop** happened in a WebEx space without touching a single console.
 
 ---
 
@@ -287,7 +287,7 @@ Cisco ISE returns endpoint posture stats, NetBox supplies source-of-truth invent
 
 INFER detects a correlated branch outage across ThousandEyes, Meraki, and Catalyst Center:
 
-> **MIGA Bot:** 🔴 **Correlated incident detected:** WAN degradation at Site-A — 3 platforms affected, root cause: upstream circuit CKT-00412 packet loss.
+> **MIGA Bot:** 🔴 **Correlated incident detected:** WAN degradation at Site-A, 3 platforms affected, root cause: upstream circuit CKT-00412 packet loss.
 
 The bot auto-creates a ServiceNow P1 incident with the full RCA attached.
 
@@ -295,9 +295,9 @@ The bot auto-creates a ServiceNow P1 incident with the full RCA attached.
 
 The bot pulls the live ticket: assigned to Network Operations, provider ticket open.
 
-> **Engineer:** `resolve INC0078432 — Lumen fiber repair completed, circuit stable`
+> **Engineer:** `resolve INC0078432: Lumen fiber repair completed, circuit stable`
 
-MIGA updates the ServiceNow ticket with resolution notes, INFER confirms health scores recovered, and the incident closes. **Full lifecycle — detection to resolution — in one WebEx thread.**
+MIGA updates the ServiceNow ticket with resolution notes, INFER confirms health scores recovered, and the incident closes. **Full lifecycle, detection to resolution, in one WebEx thread.**
 
 ---
 
@@ -307,7 +307,7 @@ INFER flags an anomaly on `10.1.50.1`. Without NetBox, that's just an IP address
 
 > **Engineer:** `what is 10.1.50.1?`
 
-NetBox resolves it: **Core Switch 3** — Catalyst 9300-48P, Rack 14, Building C, serial FCW2345L0AB, running IOS-XE 17.09.04a.
+NetBox resolves it: **Core Switch 3**: Catalyst 9300-48P, Rack 14, Building C, serial FCW2345L0AB, running IOS-XE 17.09.04a.
 
 > **Engineer:** `what's the blast radius?`
 
@@ -323,10 +323,10 @@ framework (Linux Foundation). Honest status of each capability:
 | Capability | Status | Detail |
 |------------|--------|--------|
 | OASF capability records | ✅ **Implemented** (verified live) | One record per server under `oasf/records/*.record.json`; all 9 validate against the OASF **1.0.0** schema server (0 errors / 0 warnings). |
-| Directory publication | ✅ **Implemented** (verified live) | At startup the gateway publishes **9/9** records to a real AGNTCY Directory (`dir-apiserver`) via the **`agntcy-dir` 1.3.0 SDK** — each returns a content-addressed **CID**; records **pull back by CID** at `schema_version` 1.0.0. Best-effort: falls back to standalone if the directory is down. |
+| Directory publication | ✅ **Implemented** (verified live) | At startup the gateway publishes **9/9** records to a real AGNTCY Directory (`dir-apiserver`) via the **`agntcy-dir` 1.3.0 SDK**, each returns a content-addressed **CID**; records **pull back by CID** at `schema_version` 1.0.0. Best-effort: falls back to standalone if the directory is down. |
 | Registry-driven routing | ✅ **Implemented** | Routing comes entirely from `config/server-registry.yaml` (loaded at startup + periodically reloaded); add a server and it's picked up with no code change. |
 | Directory-search routing discovery | 🟢 **Implemented** (opt-in; verified live) | With `MIGA_DISCOVERY_ROUTING=1` the gateway resolves each role's servers via a live directory search (skills to records to `miga_registry_ref` to registry connection). The static registry is the default and the guaranteed fallback. In a single-instance deployment the search rediscovers MIGA's own published records; multi-party discovery lands under federation. See `DISCOVERY_VERIFY.md`. |
-| Identity / Agent Badges | 🔲 **Planned** | `IdentityBadge` is a scaffold only — no cryptographic signing or verification. |
+| Identity / Agent Badges | 🔲 **Planned** | `IdentityBadge` is a scaffold only; no cryptographic signing or verification. |
 | SLIM (v2) messaging | 🔲 **Planned** | Inter-service messaging is Redis pub/sub today; quantum-safe AGNTCY SLIM is future. |
 | Observability (v2) | 🔲 **Planned** | No OpenTelemetry tracing wired. |
 
@@ -336,7 +336,7 @@ framework (Linux Foundation). Honest status of each capability:
 > `VERIFY_DIRECTORY.md`.
 
 **What is real and load-bearing:** a registry-driven gateway fronting 8 real external
-MCP servers plus INFER, with a validated OASF 1.0.0 capability record per server — now
+MCP servers plus INFER, with a validated OASF 1.0.0 capability record per server, now
 also published to a real AGNTCY Directory.
 
 ## Deployment
@@ -384,4 +384,4 @@ record under `oasf/records/`, and wire any env vars in `.env.example`. See
 
 ## License
 
-Apache 2.0 — See [LICENSE](LICENSE)
+Apache 2.0. See [LICENSE](LICENSE)
