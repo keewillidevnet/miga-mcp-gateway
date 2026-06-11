@@ -275,27 +275,37 @@ class DirectoryClient:
         the async caller pulls it. Any wrong field shape raises and is caught by the
         caller, which returns [] (best-effort).
 
-        TODO: CONFIRM SearchRecordsRequest / RecordQuery fields against agntcy-dir 1.3.0
-        via introspection on the Mac (see DISCOVERY_VERIFY.md) before relying on this.
-        Until confirmed, search may raise here and routing falls back to static.
+        Confirmed against agntcy-dir 1.3.0 by introspection: SearchRecordsRequest has
+        ``queries``/``limit``/``offset``; RecordQuery has ``type``/``value``; the skill
+        query type is ``RECORD_QUERY_TYPE_SKILL_NAME``; ``search_records`` returns
+        ``list[SearchRecordsResponse]``. Response field access stays defensive. Any
+        unexpected shape still raises and is caught by the caller (routing -> static).
         """
         from agntcy.dir_sdk.models import search_v1  # TODO confirm module/type names
 
         # One query per skill name. AGNTCY search matches records by skill.
         queries = [
             search_v1.RecordQuery(
-                type=search_v1.RecordQueryType.RECORD_QUERY_TYPE_SKILL,  # TODO confirm enum
+                # Confirmed against agntcy-dir 1.3.0 via introspection (SKILL_NAME, not SKILL).
+                type=search_v1.RecordQueryType.RECORD_QUERY_TYPE_SKILL_NAME,
                 value=name,
             )
             for name in skills
         ]
         req = search_v1.SearchRecordsRequest(queries=queries, limit=limit)  # TODO confirm fields
 
+        # search_records(req) -> list[SearchRecordsResponse] (confirmed). Each response
+        # carries a match; read its CID and, if present, an inline record. Field names
+        # are read defensively (cid / record_ref.cid; data / record.data) so a thin
+        # CID-only response still works (the async caller pulls by CID).
         results = client.search_records(req)
 
         out: list[tuple[str | None, dict | None]] = []
         for item in results:
             cid = getattr(item, "cid", None)
+            ref = getattr(item, "record_ref", None)
+            if cid is None and ref is not None:
+                cid = getattr(ref, "cid", None)
             data = getattr(item, "data", None)
             rec = MessageToDict(data) if data is not None else None
             if rec is None:
