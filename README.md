@@ -46,9 +46,9 @@ and risk scoring across platforms.
 │             NLP Intent -> MCP Client -> Adaptive Cards -> HITL             │
 │                     [AGNTCY Identity Badge — planned]                      │
 └────────────────────────────────────────────────────────────────────────────┘
-                                       │                                      
+                                       │
                                        │ JSON-RPC 2.0 (MCP)
-                                       ▼                                      
+                                       ▼
 ┌────────────────────────────────────────────────────────────────────────────┐
 │                        Gateway MCP Server (Python)                         │
 │           Registry-driven routing  (config/server-registry.yaml)           │
@@ -57,8 +57,8 @@ and risk scoring across platforms.
 │                   Configuration | Compliance | Identity                    │
 │        MCP CLIENT transports: HTTP/SSE URLs + stdio (docker run -i)        │
 └────────────────────────────────────────────────────────────────────────────┘
-         │                   │                   │                   │        
-         ▼                   ▼                   ▼                   ▼        
+         │                   │                   │                   │
+         ▼                   ▼                   ▼                   ▼
 ┌────────────────┐  ┌────────────────┐  ┌────────────────┐  ┌────────────────┐
 │  ThousandEyes  │  │     Splunk     │  │     Meraki     │  │     SD-WAN     │
 │     Cisco      │  │                │  │     Cisco      │  │     Cisco      │
@@ -151,7 +151,39 @@ engine. Connection details for every row live in `config/server-registry.yaml`.
 | NetBox | Official (NetBox Labs) | [netboxlabs/netbox-mcp-server](https://github.com/netboxlabs/netbox-mcp-server) (read-only) | Configuration, Compliance |
 | INFER | MIGA-original | `servers/infer_mcp` | Observability, Security, Compliance |
 
+## Quick Start (credential-free)
+
+MIGA runs end to end with no external platform credentials. The gateway and INFER
+run locally; the eight external platforms (ThousandEyes, Splunk, Meraki, SD-WAN,
+Catalyst Center, ISE, ServiceNow, NetBox) report unreachable until you configure them.
+
+docker compose up -d
+
+Then message the bot in WebEx. These commands return real output with no credentials:
+
+| Command | What it does | Without credentials |
+|---|---|---|
+| `help` | Capability menu | Full menu |
+| `gateway status` | Gateway health and routing table | Real data |
+| `network status` | Per-server reachability | INFER reachable; the eight platforms unreachable |
+| `risk score` | INFER composite risk | Runs; reads 0/100 until telemetry flows |
+| `correlate events` | INFER event correlation | Runs; empty until telemetry flows |
+| `root cause analysis` | INFER root cause | Runs; empty until telemetry flows |
+| `any anomalies?` | INFER anomaly detection | Runs; empty until telemetry flows |
+| `predict failures` | INFER predictive analysis | Runs; empty until telemetry flows |
+
+The INFER commands return real, structured output immediately. The scores and findings
+stay empty until the external platforms are configured and feed telemetry into INFER.
+See `docs/BOT_DEMO.md` for a full credential-free walkthrough with live evidence.
+
+Everything in Use Case Scenarios below assumes the external platforms are configured
+with credentials.
+
 ## Use Case Scenarios
+
+> These scenarios show MIGA with the external platforms configured with credentials.
+> The multi-platform results below (health cards, correlated incidents, NetBox inventory)
+> require those credentials. For what runs with no credentials, see Quick Start above.
 
 ### 🚨 NOC / Incident Response
 
