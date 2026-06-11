@@ -7,7 +7,7 @@ import time
 from contextlib import asynccontextmanager
 from typing import Any
 
-from mcp.server.fastmcp import FastMCP
+from mcp.server.fastmcp import Context, FastMCP
 
 from miga_shared.agntcy import DirectoryClient, IdentityBadge, OASFRecord
 from miga_shared.clients import CiscoAPIClient
@@ -61,10 +61,10 @@ def add_health_tool(mcp_server: FastMCP, platform: PlatformType, name: str):
         name=f"{name}_health",
         annotations={"title": f"{name} Health Check", "readOnlyHint": True},
     )
-    async def health_check(ctx=None) -> str:
+    async def health_check(ctx: Context) -> str:
         """Return service health status."""
         import json
-        state = ctx.request_context.lifespan_state
+        state = ctx.request_context.lifespan_context
         uptime = time.time() - state.get("start_time", time.time())
         status = HealthStatus(
             service=name,

@@ -29,7 +29,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any
 
-from mcp.server.fastmcp import FastMCP
+from mcp.server.fastmcp import Context, FastMCP
 from pydantic import BaseModel, ConfigDict, Field
 from starlette.responses import JSONResponse
 
@@ -189,7 +189,10 @@ pool = MCPClientPool()
 
 
 @asynccontextmanager
-async def app_lifespan():
+async def app_lifespan(_server: FastMCP):
+    # FastMCP's lifespan_wrapper calls lifespan(server), so this MUST accept the server
+    # argument. Defining it with no parameter raised TypeError per request, which closed
+    # the response stream and surfaced as anyio.ClosedResourceError / HTTP 500 on /mcp.
     _configure_logging()  # re-assert after uvicorn's logging reconfiguration
     directory = DirectoryClient()
     bus = RedisPubSub()
@@ -358,10 +361,10 @@ def _discovery_enabled() -> bool:
 async def _resolve_servers(role: MIGARole, ctx) -> list[ServerSpec]:
     """Pick the servers for a role. Default: the static registry (byte-for-byte the
     prior behavior). With MIGA_DISCOVERY_ROUTING enabled and a directory in
-    lifespan_state, try a live directory search first and fall back to static on any
+    lifespan_context, try a live directory search first and fall back to static on any
     empty/unavailable result."""
     if _discovery_enabled() and ctx is not None:
-        state = getattr(getattr(ctx, "request_context", None), "lifespan_state", None) or {}
+        state = getattr(getattr(ctx, "request_context", None), "lifespan_context", None) or {}
         directory = state.get("directory")
         role_skills = state.get("role_skills") or {}
         if directory is not None:
@@ -431,7 +434,7 @@ async def _fan_out(role: MIGARole, params: RoleQueryInput, ctx) -> str:
 
 
 @mcp.tool(name="observability", annotations={"readOnlyHint": True, "idempotentHint": True})
-async def observability(params: RoleQueryInput, ctx=None) -> str:
+async def observability(params: RoleQueryInput, ctx: Context) -> str:
     """Query observability data across the registered platforms — health,
     telemetry, ThousandEyes path analysis, Catalyst Center/Meraki assurance, and
     INFER anomalies."""
@@ -439,35 +442,35 @@ async def observability(params: RoleQueryInput, ctx=None) -> str:
 
 
 @mcp.tool(name="security", annotations={"readOnlyHint": True, "idempotentHint": True})
-async def security(params: RoleQueryInput, ctx=None) -> str:
+async def security(params: RoleQueryInput, ctx: Context) -> str:
     """Query security data across the registered platforms — Splunk/Meraki security
     events, ISE posture, and INFER anomaly correlation."""
     return await _fan_out(MIGARole.SECURITY, params, ctx)
 
 
 @mcp.tool(name="automation", annotations={"readOnlyHint": False})
-async def automation(params: RoleQueryInput, ctx=None) -> str:
+async def automation(params: RoleQueryInput, ctx: Context) -> str:
     """Execute automation workflows across platforms — SD-WAN/Catalyst Center
     actions and ServiceNow ticketing. ⚠️ Destructive actions require approval."""
     return await _fan_out(MIGARole.AUTOMATION, params, ctx)
 
 
 @mcp.tool(name="configuration", annotations={"readOnlyHint": True, "idempotentHint": True})
-async def configuration(params: RoleQueryInput, ctx=None) -> str:
+async def configuration(params: RoleQueryInput, ctx: Context) -> str:
     """Query and manage configuration across platforms — Meraki/SD-WAN/Catalyst
     Center settings and NetBox source-of-truth data."""
     return await _fan_out(MIGARole.CONFIGURATION, params, ctx)
 
 
 @mcp.tool(name="compliance", annotations={"readOnlyHint": True, "idempotentHint": True})
-async def compliance(params: RoleQueryInput, ctx=None) -> str:
+async def compliance(params: RoleQueryInput, ctx: Context) -> str:
     """Query compliance and audit data — ISE posture, NetBox change history, and
     INFER risk scoring."""
     return await _fan_out(MIGARole.COMPLIANCE, params, ctx)
 
 
 @mcp.tool(name="identity", annotations={"readOnlyHint": True, "idempotentHint": True})
-async def identity(params: RoleQueryInput, ctx=None) -> str:
+async def identity(params: RoleQueryInput, ctx: Context) -> str:
     """Query identity and access data — Cisco ISE sessions, endpoints, and
     authorization posture."""
     return await _fan_out(MIGARole.IDENTITY, params, ctx)
@@ -479,7 +482,7 @@ async def identity(params: RoleQueryInput, ctx=None) -> str:
 
 
 @mcp.tool(name="network_status", annotations={"readOnlyHint": True, "idempotentHint": True})
-async def network_status(ctx=None) -> str:
+async def network_status(ctx: Context) -> str:
     """Get a quick cross-platform reachability summary of all registered servers."""
     servers = routing.all()
     lines = ["## MIGA — Network Status Overview\n", f"**Registered Servers:** {len(servers)}\n"]
@@ -503,9 +506,9 @@ async def network_status(ctx=None) -> str:
 
 
 @mcp.tool(name="gateway_health", annotations={"readOnlyHint": True})
-async def gateway_health(ctx=None) -> str:
+async def gateway_health(ctx: Context) -> str:
     """Gateway health check — routing table status and uptime."""
-    state = ctx.request_context.lifespan_state
+    state = ctx.request_context.lifespan_context
     uptime = time.time() - state["start_time"]
     servers = routing.all()
     return json.dumps(

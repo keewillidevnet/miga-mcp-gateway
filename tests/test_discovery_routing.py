@@ -104,7 +104,7 @@ class _FakePool:
 def _ctx_with(directory, role_skills):
     return SimpleNamespace(
         request_context=SimpleNamespace(
-            lifespan_state={"directory": directory, "role_skills": role_skills}
+            lifespan_context={"directory": directory, "role_skills": role_skills}
         )
     )
 
