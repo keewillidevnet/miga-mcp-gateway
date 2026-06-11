@@ -57,14 +57,14 @@ INTENT_PATTERNS: list[tuple[str, IntentCategory, Optional[str], float]] = [
     # Security
     (r"(?:security|threat|xdr)\s+(?:events?|incidents?|alerts?|threats?)", IntentCategory.SECURITY, "xdr", 0.90),
     (r"(?:malware|amp|ids|ips)\s+(?:events?|detections?|alerts?)", IntentCategory.SECURITY, None, 0.90),
-    (r"(?:lateral\s+movement|suspicious|anomal)", IntentCategory.SECURITY, None, 0.85),
+    (r"(?:lateral\s+movement|suspicious)", IntentCategory.SECURITY, None, 0.85),
     (r"(?:firewall|fw)\s+(?:rules?|policies?|status)", IntentCategory.SECURITY, "security_cloud_control", 0.85),
     (r"(?:hypershield|ebpf)\s+(?:status|enforcement|flows?)", IntentCategory.SECURITY, "hypershield", 0.85),
 
     # INFER-specific
     (r"(?:correlat|root.cause|rca)", IntentCategory.OBSERVABILITY, "infer", 0.90),
     (r"(?:predict|forecast)\s+(?:fail|outage|incident)", IntentCategory.OBSERVABILITY, "infer", 0.90),
-    (r"(?:anomal|unusual|abnormal)\s+(?:pattern|behavior|traffic)", IntentCategory.OBSERVABILITY, "infer", 0.85),
+    (r"(?:anomal|unusual|abnormal)", IntentCategory.OBSERVABILITY, "infer", 0.85),
     (r"risk\s+score", IntentCategory.COMPLIANCE, "infer", 0.90),
 
     # Automation

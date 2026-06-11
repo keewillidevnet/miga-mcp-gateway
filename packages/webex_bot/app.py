@@ -167,6 +167,39 @@ INTENT_TO_TOOL: dict[IntentCategory, str] = {
     IntentCategory.STATUS: "network_status",
 }
 
+# The six role meta-tools take a single RoleQueryInput argument named ``params``; the
+# gateway validates against that model, so their arguments MUST be nested under "params".
+# network_status and gateway_health take no params model and are called with {}.
+_ROLE_TOOLS: frozenset[str] = frozenset(
+    {"observability", "security", "automation", "configuration", "compliance", "identity"}
+)
+
+# INFER intents recognised by the NLP only carry platform="infer"; they do not name the
+# specific downstream INFER tool. Map the recognised phrasing to the exact tool so the role
+# meta-tool calls it directly (params.tool_name) instead of falling back to a health sweep.
+# Ordered: the first keyword found in the user text wins (more specific phrases first).
+_INFER_TOOL_BY_KEYWORD: tuple[tuple[str, str], ...] = (
+    ("root cause", "infer_root_cause_analysis"),
+    ("rca", "infer_root_cause_analysis"),
+    ("correlat", "infer_correlate_events"),
+    ("predict", "infer_predict_failures"),
+    ("forecast", "infer_predict_failures"),
+    ("anomal", "infer_detect_anomalies"),
+    ("unusual", "infer_detect_anomalies"),
+    ("abnormal", "infer_detect_anomalies"),
+    ("timeline", "infer_get_incident_timeline"),
+    ("risk", "infer_network_risk_score"),
+)
+
+
+def _infer_tool_for(text: str) -> str | None:
+    """Resolve the specific INFER tool a credential-free INFER intent should call."""
+    low = text.lower()
+    for keyword, tool in _INFER_TOOL_BY_KEYWORD:
+        if keyword in low:
+            return tool
+    return None
+
 
 # No NLP intent maps to the gateway_health tool, so route a few explicit phrases to it
 # directly. This is bot-level routing only; the NLP module is unchanged.
@@ -203,17 +236,38 @@ async def handle_intent(intent: ParsedIntent, room_id: str) -> None:
     else:
         tool_name = INTENT_TO_TOOL.get(intent.category, "observability")
 
-    arguments: dict[str, Any] = {}
-    if intent.platform:
-        arguments["platforms"] = [intent.platform]
-    if intent.tool_name:
-        arguments["tool_name"] = intent.tool_name
-    arguments.update(intent.arguments)
+    if tool_name in _ROLE_TOOLS:
+        # Role meta-tools validate a RoleQueryInput; everything goes under "params".
+        params: dict[str, Any] = {}
+        if intent.platform:
+            params["platforms"] = [intent.platform]
+
+        # Pick the concrete downstream tool. The NLP may name one; otherwise resolve it
+        # from the text for INFER intents so e.g. "risk score" hits infer_network_risk_score
+        # rather than the generic health sweep.
+        downstream = intent.tool_name
+        if not downstream and intent.platform == "infer":
+            downstream = _infer_tool_for(intent.raw_text)
+
+        if downstream:
+            params["tool_name"] = downstream
+            # The gateway passes params.arguments verbatim to the downstream tool. INFER
+            # tools take their own ``params`` model, so the downstream args are nested the
+            # same way. The credential-free INFER intents use the model defaults ({}).
+            inner = dict(intent.arguments) if intent.arguments else {}
+            params["arguments"] = {"params": inner}
+        elif intent.arguments:
+            params["arguments"] = dict(intent.arguments)
+
+        call_args: dict[str, Any] = {"params": params}
+    else:
+        # network_status / gateway_health take no params model.
+        call_args = {}
 
     # Send thinking indicator
     await webex_send_message(room_id, text="🔍 Checking...")
 
-    result = await call_gateway(tool_name, arguments)
+    result = await call_gateway(tool_name, call_args)
     await webex_send_message(room_id, markdown=result)
 
 

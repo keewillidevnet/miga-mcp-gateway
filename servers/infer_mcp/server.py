@@ -390,7 +390,11 @@ INFER_OASF = OASFRecord(
 
 
 @asynccontextmanager
-async def app_lifespan():
+async def app_lifespan(_server: FastMCP):
+    # FastMCP's lifespan_wrapper calls lifespan(server), so this MUST accept the server
+    # argument. Defining it with no parameter raised TypeError per request, which crashed
+    # INFER's stdio startup and made the gateway's INFER fan-out fail with an unhandled
+    # TaskGroup error. (Same root cause as the gateway transport fix.)
     async with miga_lifespan(INFER_OASF, api_factory=None) as state:
         bus: RedisPubSub = state["bus"]
 
