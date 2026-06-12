@@ -1,4 +1,4 @@
-"""Tests for the WebEx bot gateway-call path and intent routing (mocked; no network/SDK)."""
+"""Tests for the Webex bot gateway-call path and intent routing (mocked; no network/SDK)."""
 
 from __future__ import annotations
 

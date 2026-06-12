@@ -7,7 +7,7 @@ and to MIGA's own INFER fusion engine, aggregates results, and returns unified
 responses.
 
 Architecture (post real-server migration):
-- FastMCP server exposing meta-tools to the WebEx Bot / external clients.
+- FastMCP server exposing meta-tools to the Webex Bot / external clients.
 - Connections are driven entirely by ``config/server-registry.yaml`` (no hardcoded
   endpoints). Each entry declares how to reach a published upstream MCP server.
 - The gateway talks to every downstream server as an MCP **client** via the
@@ -267,7 +267,7 @@ async def _internal_call(request) -> JSONResponse:
     """Dev-only internal fallback. POST {"tool", "arguments"} -> invoke the tool and
     return MCP-shaped {"content": [{"type": "text", "text": ...}]}.
 
-    The MCP streamable-http client is the PRIMARY path the WebEx bot uses (the bot is an
+    The MCP streamable-http client is the PRIMARY path the Webex bot uses (the bot is an
     MCP client). This route exists ONLY so a single demo session can still succeed if the
     streamable-http handshake misbehaves in the operator's environment. It is a dev
     convenience and fallback, not a replacement for the MCP client and not a claim that

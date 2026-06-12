@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# run_demo.sh: one-command orchestrator for the credential-free WebEx demo.
+# run_demo.sh: one-command orchestrator for the credential-free Webex demo.
 #
 # Collapses the manual steps in docs/BOT_DEMO.md into a single command. It brings up the
 # local stack, starts the bot, opens an ephemeral tunnel, registers the Webex webhook, and

@@ -1,8 +1,8 @@
-# MIGA WebEx Bot, Credential-Free Demo
+# MIGA Webex Bot, Credential-Free Demo
 
 ## What this proves
 
-The WebEx bot talks to the MIGA gateway over MCP, and the gateway routes to INFER, with no external platform credentials. INFER and the gateway status tools return real data. The eight external platforms (ThousandEyes, Splunk, Meraki, Catalyst SD-WAN, Catalyst Center, ISE, ServiceNow, NetBox) report unreachable because they are not configured, which is the honest credential-free baseline.
+The Webex bot talks to the MIGA gateway over MCP, and the gateway routes to INFER, with no external platform credentials. INFER and the gateway status tools return real data. The eight external platforms (ThousandEyes, Splunk, Meraki, Catalyst SD-WAN, Catalyst Center, ISE, ServiceNow, NetBox) report unreachable because they are not configured, which is the honest credential-free baseline.
 
 ## Path
 

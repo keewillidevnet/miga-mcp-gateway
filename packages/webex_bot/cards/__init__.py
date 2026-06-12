@@ -1,6 +1,6 @@
-"""WebEx Adaptive Card templates for rich interactive UI.
+"""Webex Adaptive Card templates for rich interactive UI.
 
-Cards are JSON templates rendered in WebEx as interactive widgets with
+Cards are JSON templates rendered in Webex as interactive widgets with
 buttons, dropdowns, and data tables.
 """
 from __future__ import annotations
@@ -134,7 +134,7 @@ def table_card(title: str, headers: list[str], rows: list[list[str]]) -> dict[st
 
 
 def wrap_card(card: dict[str, Any]) -> dict[str, Any]:
-    """Wrap an Adaptive Card for the WebEx API attachment format."""
+    """Wrap an Adaptive Card for the Webex API attachment format."""
     return {
         "contentType": "application/vnd.microsoft.card.adaptive",
         "content": card,

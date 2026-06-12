@@ -45,7 +45,7 @@ jobs:
         run: |
           # Gateway / shared runtime deps
           pip install fastmcp httpx pydantic "redis[hiredis]" PyJWT cryptography
-          # WebEx bot runtime deps, imported by packages/webex_bot/app.py at pytest
+          # Webex bot runtime deps, imported by packages/webex_bot/app.py at pytest
           # collection time: aiohttp (webhook server), httpx (above), and the mcp client.
           # fastmcp pulls mcp transitively, but the bot declares it explicitly.
           pip install aiohttp mcp

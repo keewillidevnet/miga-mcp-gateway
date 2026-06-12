@@ -1,4 +1,4 @@
-"""Tests for WebEx Bot Adaptive Card templates."""
+"""Tests for Webex Bot Adaptive Card templates."""
 
 from __future__ import annotations
 

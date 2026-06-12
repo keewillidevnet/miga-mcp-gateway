@@ -1,8 +1,8 @@
-"""MIGA WebEx Bot — Conversational interface to the MCP Gateway.
+"""MIGA Webex Bot — Conversational interface to the MCP Gateway.
 
-Receives messages from WebEx via webhook, processes NLP intent recognition,
+Receives messages from Webex via webhook, processes NLP intent recognition,
 forwards to the Gateway MCP server, and renders results as Adaptive Cards
-or Markdown in the WebEx room.
+or Markdown in the Webex room.
 """
 from __future__ import annotations
 
@@ -41,11 +41,11 @@ http_client = httpx.AsyncClient(timeout=60.0)
 
 
 # ---------------------------------------------------------------------------
-# WebEx API helpers
+# Webex API helpers
 # ---------------------------------------------------------------------------
 
 async def webex_get_message(message_id: str) -> dict[str, Any]:
-    """Fetch message content from WebEx."""
+    """Fetch message content from Webex."""
     resp = await http_client.get(
         f"{WEBEX_API}/messages/{message_id}",
         headers={"Authorization": f"Bearer {BOT_TOKEN}"},
@@ -60,7 +60,7 @@ async def webex_send_message(
     markdown: str = "",
     card: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    """Send a message (text, markdown, or Adaptive Card) to a WebEx room."""
+    """Send a message (text, markdown, or Adaptive Card) to a Webex room."""
     payload: dict[str, Any] = {"roomId": room_id}
     if card:
         payload["text"] = text or "MIGA response (card attached)"
@@ -198,7 +198,7 @@ async def _call_gateway_http(tool_name: str, arguments: dict[str, Any]) -> str:
 async def call_gateway(tool_name: str, arguments: dict[str, Any] | None = None) -> str:
     """Call a tool on the MIGA Gateway.
 
-    Primary path is the official MCP streamable-http client (the WebEx bot embeds an MCP
+    Primary path is the official MCP streamable-http client (the Webex bot embeds an MCP
     client). ``MIGA_BOT_GATEWAY_MODE=http`` selects the gateway's internal dev fallback
     route instead. Best-effort: an unreachable gateway returns a friendly message and
     never raises into the webhook handler.
@@ -338,7 +338,7 @@ async def handle_intent(intent: ParsedIntent, room_id: str) -> None:
 # ---------------------------------------------------------------------------
 
 async def handle_webhook(request: web.Request) -> web.Response:
-    """Handle incoming WebEx webhook events."""
+    """Handle incoming Webex webhook events."""
     try:
         data = await request.json()
     except Exception:

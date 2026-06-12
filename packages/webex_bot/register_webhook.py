@@ -1,4 +1,4 @@
-"""Idempotent WebEx webhook self-registration for the MIGA bot.
+"""Idempotent Webex webhook self-registration for the MIGA bot.
 
 Run:  python -m packages.webex_bot.register_webhook
 

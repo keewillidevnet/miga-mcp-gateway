@@ -15,7 +15,7 @@
 > A unified intelligence layer that **aggregates and fuses** AI/ML and operational
 > data from real, published MCP servers across the network ecosystem into a single,
 > consistent, role-based interface for analysis, automation, and decision support,
-> with a conversational WebEx Chat interface.
+> with a conversational Webex Chat interface.
 
 ---
 
@@ -29,7 +29,7 @@ integrations, the MIGA gateway connects to each platform's *real, published MCP
 server* as an MCP **client**, routes by role, and adds cross-platform reasoning that
 no single platform can provide.
 
-Users interact conversationally through a **WebEx Bot** that embeds an MCP Client,
+Users interact conversationally through a **Webex Bot** that embeds an MCP Client,
 converting natural language into structured MCP tool calls via an NLP pipeline, with
 results rendered as rich Adaptive Cards.
 
@@ -42,7 +42,7 @@ and risk scoring across platforms.
 
 ```
 ┌────────────────────────────────────────────────────────────────────────────┐
-│                             WebEx Bot (Python)                             │
+│                             Webex Bot (Python)                             │
 │             NLP Intent -> MCP Client -> Adaptive Cards -> HITL             │
 │                     [AGNTCY Identity Badge — planned]                      │
 └────────────────────────────────────────────────────────────────────────────┘
@@ -104,7 +104,7 @@ docker compose up -d redis gateway infer-mcp
 python -m packages.cli.miga_cli status
 ```
 
-Then open WebEx and message the MIGA bot. These commands return real output with no
+Then open Webex and message the MIGA bot. These commands return real output with no
 credentials:
 
 | Command | What it does | Without credentials |
@@ -128,15 +128,15 @@ community server images referenced by docker-compose (Meraki, ISE, NetBox, SD-WA
 their upstream repos. See `MIGRATION.md`. Everything in Use Case Scenarios below assumes
 the platforms are configured this way.
 
-## WebEx Bot
+## Webex Bot
 
-The WebEx bot is a conversational interface to the gateway: rule-based NLP turns a
+The Webex bot is a conversational interface to the gateway: rule-based NLP turns a
 message into a gateway tool call (the bot embeds an MCP client over streamable-http) and
 renders the reply as Markdown or an Adaptive Card.
 
 | Capability | Status |
 |------------|--------|
-| Conversational interface (NLP -> gateway -> WebEx) | ✅ Implemented |
+| Conversational interface (NLP -> gateway -> Webex) | ✅ Implemented |
 | MCP client to the gateway (streamable-http) | ✅ Implemented (internal HTTP dev fallback available) |
 | Webhook self-registration | ✅ Implemented (`python -m packages.webex_bot.register_webhook`) |
 | Credential-free live demo (INFER + `network_status` + `gateway_health`) | ✅ Implemented; see [docs/BOT_DEMO.md](docs/BOT_DEMO.md). Verified live via docker compose + cloudflared tunnel. |
@@ -233,7 +233,7 @@ engine. Connection details for every row live in `config/server-registry.yaml`.
 
 ### 🚨 NOC / Incident Response
 
-A network engineer gets paged at 2 AM. Instead of logging into four different dashboards, they open WebEx on their phone:
+A network engineer gets paged at 2 AM. Instead of logging into four different dashboards, they open Webex on their phone:
 
 > **Engineer:** `network status`
 
@@ -245,13 +245,13 @@ INFER finds the ThousandEyes path loss overlaps with a Meraki VPN tunnel flap an
 
 > **Engineer:** `run show interface gi1/0/1 on switch-br-01`
 
-The bot presents an **approval card**. The on-call lead taps ✅ **Approve**. The command executes through Catalyst Center and results render inline. Total time: **3 minutes, never left WebEx.**
+The bot presents an **approval card**. The on-call lead taps ✅ **Approve**. The command executes through Catalyst Center and results render inline. Total time: **3 minutes, never left Webex.**
 
 ---
 
 ### 🔒 Security Operations
 
-A SOC analyst opens the Network Security WebEx space:
+A SOC analyst opens the Network Security Webex space:
 
 > **Analyst:** `critical security events`
 
@@ -263,7 +263,7 @@ INFER calculates a composite **78/100**: the top contributor is an endpoint with
 
 > **Analyst:** `quarantine endpoint AA:BB:CC:DD:EE:01`
 
-An approval card fires to the security lead. One tap, and Cisco ISE isolates the device. The entire **triage-to-containment loop** happened in a WebEx space without touching a single console.
+An approval card fires to the security lead. One tap, and Cisco ISE isolates the device. The entire **triage-to-containment loop** happened in a Webex space without touching a single console.
 
 ---
 
@@ -301,7 +301,7 @@ The bot pulls the live ticket: assigned to Network Operations, provider ticket o
 
 > **Engineer:** `resolve INC0078432: Lumen fiber repair completed, circuit stable`
 
-MIGA updates the ServiceNow ticket with resolution notes, INFER confirms health scores recovered, and the incident closes. **Full lifecycle, detection to resolution, in one WebEx thread.**
+MIGA updates the ServiceNow ticket with resolution notes, INFER confirms health scores recovered, and the incident closes. **Full lifecycle, detection to resolution, in one Webex thread.**
 
 ---
 
@@ -351,7 +351,7 @@ For local development, see [Quick Start](#quick-start).
 ```bash
 helm install miga ./helm/miga --namespace miga --create-namespace
 ```
-(The Helm chart deploys the gateway, WebEx bot, and INFER. External platform servers are
+(The Helm chart deploys the gateway, Webex bot, and INFER. External platform servers are
 provisioned out-of-band and referenced via the registry.)
 
 ## Project Structure
@@ -370,7 +370,7 @@ miga-mcp-gateway/
 │   └── ...                          # auth, AGNTCY, models, formatters
 ├── packages/
 │   ├── gateway/                     # Gateway MCP Server (registry-driven role routing)
-│   ├── webex_bot/                   # WebEx Bot (NLP + MCP Client + Adaptive Cards)
+│   ├── webex_bot/                   # Webex Bot (NLP + MCP Client + Adaptive Cards)
 │   └── cli/                         # miga-cli tool
 ├── servers/
 │   └── infer_mcp/                   # INFER fusion engine — MIGA's only original server

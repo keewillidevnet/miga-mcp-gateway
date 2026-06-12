@@ -63,7 +63,7 @@ HEALTHCHECK --interval=30s --timeout=5s --retries=3 \
 CMD ["python", "-m", "packages.gateway.server"]
 
 # ---------------------------------------------------------------------------
-# WebEx Bot target
+# Webex Bot target
 # ---------------------------------------------------------------------------
 FROM base AS webex-bot
 
