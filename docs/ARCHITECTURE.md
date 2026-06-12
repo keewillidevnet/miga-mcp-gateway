@@ -17,7 +17,7 @@
    analysis, anomaly correlation, predictive failure analysis) that no single
    platform can generate alone.
 
-4. **Conversation-first** — WebEx Bot embeds NLP intent recognition to convert
+4. **Conversation-first** — Webex Bot embeds NLP intent recognition to convert
    natural language into MCP tool calls, with results rendered as Adaptive Cards.
 
 ## Component Overview
@@ -60,9 +60,9 @@ Subscribes to all platform telemetry via Redis pub/sub. Performs:
 - **Predictive analysis** — Pattern matching against historical incidents
 - **Risk scoring** — Composite 0-100 network risk score
 
-### WebEx Bot
+### Webex Bot
 
-- Webhook-based: receives messages from WebEx, processes NLP, calls Gateway
+- Webhook-based: receives messages from Webex, processes NLP, calls Gateway
 - Hybrid NLP: regex patterns for common commands, LLM fallback for ambiguity
 - Adaptive Cards for rich interactive UI (health dashboards, approval forms)
 - Human-in-the-loop: destructive actions surface approval cards before execution
@@ -70,10 +70,10 @@ Subscribes to all platform telemetry via Redis pub/sub. Performs:
 ## Data Flow
 
 ```
-User → WebEx Message → Bot Webhook → NLP Intent
+User → Webex Message → Bot Webhook → NLP Intent
   → Gateway MCP Call → role → registered servers (registry)
   → MCP client transport (HTTP/SSE or stdio) → upstream MCP servers
-  → Results → Gateway aggregation → Markdown/Card → WebEx Response
+  → Results → Gateway aggregation → Markdown/Card → Webex Response
 
 Normalized server output → Redis pub/sub → INFER subscription
   → Correlation/Analysis → Published insights
@@ -120,7 +120,7 @@ servers over a spawned subprocess (no port).
 |---------|--------------|
 | Gateway | 8000 |
 | INFER (MIGA-original) | 8007 |
-| WebEx Bot | 9000 |
+| Webex Bot | 9000 |
 | Redis | 6379 |
 | AGNTCY Directory | 8500 |
 | Cisco Meraki (compose) | 8000/mcp (internal) |

@@ -137,7 +137,7 @@ def recognize_intent(text: str) -> ParsedIntent:
 
 
 def format_help() -> str:
-    """Generate help text for the WebEx Bot."""
+    """Generate help text for the Webex Bot."""
     return """## MIGA — What can I do?
 
 **Quick Status:**

@@ -1,4 +1,4 @@
-"""Tests for WebEx webhook self-registration (WebEx API mocked)."""
+"""Tests for Webex webhook self-registration (Webex API mocked)."""
 
 from __future__ import annotations
 

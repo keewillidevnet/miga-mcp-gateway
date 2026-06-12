@@ -159,7 +159,7 @@ def deploy(env: str, platforms: str, build: bool, detach: bool):
         if rc == 0:
             click.secho("✅ MIGA cluster is running!", fg="green")
             click.echo("   Gateway: http://localhost:8000")
-            click.echo("   WebEx Bot: http://localhost:9000")
+            click.echo("   Webex Bot: http://localhost:9000")
         else:
             click.secho("❌ Deployment failed.", fg="red")
             sys.exit(1)

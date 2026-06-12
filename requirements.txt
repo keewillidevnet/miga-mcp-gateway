@@ -17,9 +17,9 @@ redis[hiredis]>=5.0.0
 PyJWT>=2.8.0
 cryptography>=41.0.0
 
-# WebEx Bot
+# Webex Bot
 aiohttp>=3.9.0
-# MCP client used by the WebEx bot to call the gateway (do not rely on the
+# MCP client used by the Webex bot to call the gateway (do not rely on the
 # gateway's install; fastmcp bundles mcp but the bot declares it explicitly).
 mcp>=1.0.0
 

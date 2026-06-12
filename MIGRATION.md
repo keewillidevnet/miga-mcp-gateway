@@ -209,7 +209,7 @@ processes and talks to third-party servers) produced these fixes, included here:
   sidecar, a restricted socket proxy, or rootless Docker).
 
 Still open / operator responsibility (not changed here): ServiceNow is read/write —
-gate it with `MCP_TOOL_PACKAGE` + a least-privilege account and ensure the WebEx
+gate it with `MCP_TOOL_PACKAGE` + a least-privilege account and ensure the Webex
 bot's HITL approval covers write tools; the upstream Catalyst Center server forces
 TLS verification off in its own code; and `packages/cli/miga_cli.py` uses
 `subprocess(..., shell=True)` (pre-existing, do-not-touch file). New tests cover the

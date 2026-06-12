@@ -1,4 +1,4 @@
-"""Tests for WebEx Bot NLP intent recognition."""
+"""Tests for Webex Bot NLP intent recognition."""
 
 from __future__ import annotations
 

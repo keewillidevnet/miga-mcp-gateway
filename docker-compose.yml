@@ -179,7 +179,7 @@ services:
     restart: unless-stopped
 
   # ==========================================================================
-  # WebEx Bot (conversational interface — unchanged)
+  # Webex Bot (conversational interface — unchanged)
   # ==========================================================================
   webex-bot:
     build:

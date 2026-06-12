@@ -55,7 +55,7 @@ MIGA_DISCOVERY_ROUTING=1 docker compose up -d gateway
 ```
 
 ## (d) Confirm discovery drives routing
-Issue a role query (via the WebEx bot or a direct MCP call to a role meta-tool, e.g.
+Issue a role query (via the Webex bot or a direct MCP call to a role meta-tool, e.g.
 `observability`), then check the logs:
 ```bash
 docker compose logs gateway | grep -iE "resolved via directory search|using static registry"
