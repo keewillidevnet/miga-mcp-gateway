@@ -15,7 +15,7 @@
 > A unified intelligence layer that **aggregates and fuses** AI/ML and operational
 > data from real, published MCP servers across the network ecosystem into a single,
 > consistent, role-based interface for analysis, automation, and decision support,
-> with a conversational Webex Chat interface.
+> with a conversational Webex chat interface.
 
 ---
 
