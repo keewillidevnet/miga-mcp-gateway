@@ -26,6 +26,7 @@ collapses several provisional entities across platforms onto one shared
 canonical_id. Phase A only guarantees: a valid canonical record, with the
 platform's native identifiers attached.
 """
+
 from __future__ import annotations
 
 from datetime import datetime, timezone
@@ -45,12 +46,14 @@ def _utcnow() -> datetime:
 # Entity side
 # ---------------------------------------------------------------------------
 
+
 class EntityType(str, Enum):
     """The kinds of real things a CanonicalEntity can represent.
 
     Covers the roadmap's named set (device, interface, user, incident) plus the
     two the Phase A platforms actually emit (endpoint, ip_address).
     """
+
     DEVICE = "device"
     INTERFACE = "interface"
     USER = "user"
@@ -72,20 +75,21 @@ class NativeIdentifiers(BaseModel):
     Phase B resolution concern; forcing a format now, before seeing real
     samples, would be guessing.
     """
+
     model_config = ConfigDict(str_strip_whitespace=True)
 
     hostname: str | None = None
     serial: str | None = None
     ip: str | None = None
     mac: str | None = None
-    ci: str | None = None          # configuration-item id (e.g. CMDB sys_id)
+    ci: str | None = None  # configuration-item id (e.g. CMDB sys_id)
     uuid: str | None = None
     extra: dict[str, str] = Field(default_factory=dict)
 
     def any_set(self) -> bool:
-        return any(
-            [self.hostname, self.serial, self.ip, self.mac, self.ci, self.uuid]
-        ) or bool(self.extra)
+        return any([self.hostname, self.serial, self.ip, self.mac, self.ci, self.uuid]) or bool(
+            self.extra
+        )
 
 
 class CanonicalEntity(BaseModel):
@@ -94,6 +98,7 @@ class CanonicalEntity(BaseModel):
     At Phase A this is single-platform: one platform record -> one entity.
     Cross-platform merging happens in Phase B.
     """
+
     model_config = ConfigDict(str_strip_whitespace=True)
 
     canonical_id: str
@@ -117,6 +122,7 @@ class CanonicalEntity(BaseModel):
 # Event side
 # ---------------------------------------------------------------------------
 
+
 class ObservationPoint(BaseModel):
     """Where a flow/telemetry event was observed.
 
@@ -125,6 +131,7 @@ class ObservationPoint(BaseModel):
     Declared now for the flow-bearing platforms that come later
     (Meraki / ThousandEyes / SD-WAN).
     """
+
     interface: str | None = None
     direction: str | None = None  # "ingress" | "egress"
 
@@ -144,11 +151,12 @@ class CanonicalEvent(BaseModel):
     source actually provides them. For the three Phase A platforms they stay
     ``None`` — see each adapter's note. They are not invented to look complete.
     """
+
     model_config = ConfigDict(str_strip_whitespace=True)
 
     # --- core ---
-    entity_ref: str                          # canonical_id of the primary entity
-    type: str                                # normalized event type
+    entity_ref: str  # canonical_id of the primary entity
+    type: str  # normalized event type
     timestamp: datetime = Field(default_factory=_utcnow)
     source_platform: PlatformType
     source_record_ref: str | None = None  # pointer back to the source record
@@ -212,9 +220,7 @@ class CanonicalEvent(BaseModel):
                 "app_classification": self.app_classification,
                 "dscp": self.dscp,
                 "observation_point": (
-                    self.observation_point.model_dump()
-                    if self.observation_point
-                    else None
+                    self.observation_point.model_dump() if self.observation_point else None
                 ),
             }.items()
             if v is not None

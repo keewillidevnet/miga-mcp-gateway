@@ -10,6 +10,7 @@ do NOT prove anything against a live/production NetBox.
 
 Run:  pytest tests/test_netbox_adapter.py
 """
+
 from __future__ import annotations
 
 import json
@@ -36,6 +37,7 @@ def _load(name: str) -> dict:
 
 
 # --- devices ---------------------------------------------------------------
+
 
 def test_devices_response_maps_every_result_to_valid_entity():
     entities = netbox_devices_response_to_entities(_load("netbox_devices.json"))
@@ -77,15 +79,14 @@ def test_empty_serial_becomes_none_and_missing_asset_tag_is_omitted():
 
 # --- ip addresses ----------------------------------------------------------
 
+
 def test_ip_address_strips_prefix_and_links_assigned_device():
-    entities = netbox_ipaddresses_response_to_entities(
-        _load("netbox_ipaddresses.json")
-    )
+    entities = netbox_ipaddresses_response_to_entities(_load("netbox_ipaddresses.json"))
     assert len(entities) == 2
     first = entities[0]
     assert first.entity_type is EntityType.IP_ADDRESS
     assert first.canonical_id == "netbox:ip:31"
-    assert first.identifiers.ip == "172.16.0.1"          # prefix stripped
+    assert first.identifiers.ip == "172.16.0.1"  # prefix stripped
     assert first.identifiers.extra["cidr"] == "172.16.0.1/24"  # full kept
     assert first.identifiers.extra["vrf"] == "Alpha"
     assert first.identifiers.extra["assigned_device"] == "dmi01-akron-rtr01"
@@ -94,15 +95,14 @@ def test_ip_address_strips_prefix_and_links_assigned_device():
 
 def test_unassigned_ip_omits_assignment_fields():
     # sample IP 32 has assigned_object null
-    second = netbox_ipaddresses_response_to_entities(
-        _load("netbox_ipaddresses.json")
-    )[1]
+    second = netbox_ipaddresses_response_to_entities(_load("netbox_ipaddresses.json"))[1]
     assert second.canonical_id == "netbox:ip:32"
     assert second.identifiers.ip == "172.16.0.2"
     assert "assigned_device" not in second.identifiers.extra
 
 
 # --- change log (events) ---------------------------------------------------
+
 
 def test_changelog_response_maps_every_result_to_valid_event():
     events = netbox_changelog_response_to_events(_load("netbox_changelog.json"))
@@ -118,18 +118,12 @@ def test_changelog_response_maps_every_result_to_valid_event():
 def test_device_update_event_points_at_the_device_entity():
     ev = netbox_changelog_response_to_events(_load("netbox_changelog.json"))[0]
     assert ev.type == "dcim.device:update"
-    assert ev.source_record_ref == (
-        "https://demo.netbox.dev/api/core/object-changes/1200/"
-    )
-    assert ev.timestamp == datetime(
-        2026, 6, 13, 15, 38, 35, 765772, tzinfo=timezone.utc
-    )
+    assert ev.source_record_ref == ("https://demo.netbox.dev/api/core/object-changes/1200/")
+    assert ev.timestamp == datetime(2026, 6, 13, 15, 38, 35, 765772, tzinfo=timezone.utc)
     # entity_ref is exactly the id the device entity adapter makes for device 1,
     # so Phase B can join this change to the entity it touched
     assert ev.entity_ref == "netbox:device:1"
-    assert ev.entity_ref == CanonicalEntity.provisional_id(
-        PlatformType.NETBOX, "device:1"
-    )
+    assert ev.entity_ref == CanonicalEntity.provisional_id(PlatformType.NETBOX, "device:1")
 
 
 def test_changed_fields_are_a_real_diff_of_pre_and_post():
@@ -161,6 +155,7 @@ def test_single_changelog_helper_matches_list_helper():
 
 
 # --- guards ----------------------------------------------------------------
+
 
 def test_list_validation_rejects_a_non_list_payload():
     with pytest.raises(ValueError):

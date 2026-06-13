@@ -10,6 +10,7 @@ MnT (XML) sample exists. Does NOT prove anything against a live/production ISE.
 
 Run:  pytest tests/test_ise_adapter.py
 """
+
 from __future__ import annotations
 
 import json
@@ -33,6 +34,7 @@ def _load(name: str):
 
 
 # --- endpoints -------------------------------------------------------------
+
 
 def test_endpoints_response_maps_every_result_to_valid_entity():
     entities = ise_endpoints_response_to_entities(_load("ise_endpoints.json"))
@@ -69,12 +71,14 @@ def test_single_record_helper_matches_list_helper():
 
 # --- session events (blocked) ----------------------------------------------
 
+
 def test_session_event_is_blocked_until_a_real_mnt_sample_exists():
     with pytest.raises(NotImplementedError):
         ise_session_to_event({"acctSessionId": "whatever"})
 
 
 # --- guards ----------------------------------------------------------------
+
 
 def test_response_validation_rejects_a_non_array_payload():
     # ERS SearchResult is a dict, not the OpenAPI bare array -> rejected here

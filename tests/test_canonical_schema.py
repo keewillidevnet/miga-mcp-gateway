@@ -8,6 +8,7 @@ samples arrive.
 
 Run:  pytest tests/test_canonical_schema.py
 """
+
 from __future__ import annotations
 
 from datetime import datetime, timezone
@@ -91,21 +92,26 @@ def test_correlated_event_overlaps_consumes_canonical_output():
     inside the window must overlap once converted, since INFER keys on that."""
     base_ts = datetime(2026, 6, 13, 12, 0, 0, tzinfo=timezone.utc)
     a = CanonicalEvent(
-        entity_ref="ise:endpoint-9", type="auth_failure",
-        source_platform=PlatformType.ISE, timestamp=base_ts,
+        entity_ref="ise:endpoint-9",
+        type="auth_failure",
+        source_platform=PlatformType.ISE,
+        timestamp=base_ts,
     ).to_correlated_event()
     b = CanonicalEvent(
         entity_ref="catalyst_center:dev-1",
         additional_entity_refs=["ise:endpoint-9"],
         type="assurance_issue",
-        source_platform=PlatformType.CATALYST_CENTER, timestamp=base_ts,
+        source_platform=PlatformType.CATALYST_CENTER,
+        timestamp=base_ts,
     ).to_correlated_event()
     assert a.overlaps_with(b) is True
 
 
 def test_entity_carries_native_identifiers_and_provisional_id():
     ident = NativeIdentifiers(
-        hostname="sw-core-01", serial="FOC1234X5YZ", ip="10.1.1.1",
+        hostname="sw-core-01",
+        serial="FOC1234X5YZ",
+        ip="10.1.1.1",
         extra={"netbox_id": "42"},
     )
     cid = CanonicalEntity.provisional_id(PlatformType.NETBOX, "42")

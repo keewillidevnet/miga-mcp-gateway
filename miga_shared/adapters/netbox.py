@@ -20,6 +20,7 @@ NetBox is an inventory / source-of-truth system. It carries no traffic, ports,
 protocol, app-classification, or DSCP, so the CanonicalEvent flow fields have no
 NetBox source and are never populated here.
 """
+
 from __future__ import annotations
 
 from typing import Any
@@ -195,15 +196,11 @@ def _results(payload: dict[str, Any]) -> list[dict[str, Any]]:
     return results
 
 
-def netbox_devices_response_to_entities(
-    payload: dict[str, Any]
-) -> list[CanonicalEntity]:
+def netbox_devices_response_to_entities(payload: dict[str, Any]) -> list[CanonicalEntity]:
     return [netbox_device_to_entity(r) for r in _results(payload)]
 
 
-def netbox_ipaddresses_response_to_entities(
-    payload: dict[str, Any]
-) -> list[CanonicalEntity]:
+def netbox_ipaddresses_response_to_entities(payload: dict[str, Any]) -> list[CanonicalEntity]:
     return [netbox_ipaddress_to_entity(r) for r in _results(payload)]
 
 
@@ -276,9 +273,7 @@ def netbox_changelog_to_event(record: dict[str, Any]) -> CanonicalEvent:
     }
 
     event_type = (
-        f"{object_type}:{action}"
-        if object_type and action
-        else (action or "object_change")
+        f"{object_type}:{action}" if object_type and action else (action or "object_change")
     )
 
     kwargs: dict[str, Any] = dict(
@@ -294,7 +289,5 @@ def netbox_changelog_to_event(record: dict[str, Any]) -> CanonicalEvent:
     return CanonicalEvent(**kwargs)
 
 
-def netbox_changelog_response_to_events(
-    payload: dict[str, Any]
-) -> list[CanonicalEvent]:
+def netbox_changelog_response_to_events(payload: dict[str, Any]) -> list[CanonicalEvent]:
     return [netbox_changelog_to_event(r) for r in _results(payload)]

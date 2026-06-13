@@ -22,6 +22,7 @@ Catalyst Center is an assurance/inventory controller, not a flow exporter, so
 the CanonicalEvent flow fields (protocol/ports/app/dscp/observation_point) have
 no source here and stay null.
 """
+
 from __future__ import annotations
 
 from typing import Any
@@ -114,9 +115,7 @@ def _response(payload: dict[str, Any]) -> list[dict[str, Any]]:
     return items
 
 
-def catalyst_devices_response_to_entities(
-    payload: dict[str, Any]
-) -> list[CanonicalEntity]:
+def catalyst_devices_response_to_entities(payload: dict[str, Any]) -> list[CanonicalEntity]:
     return [catalyst_device_to_entity(r) for r in _response(payload)]
 
 
@@ -137,9 +136,7 @@ def catalyst_issue_to_event(issue: dict[str, Any]) -> CanonicalEvent:
     )
 
 
-def catalyst_issues_response_to_events(
-    payload: dict[str, Any]
-) -> list[CanonicalEvent]:
+def catalyst_issues_response_to_events(payload: dict[str, Any]) -> list[CanonicalEvent]:
     """Map a /issues response to events.
 
     Works on the verified envelope: the empty real sample yields []. If the list

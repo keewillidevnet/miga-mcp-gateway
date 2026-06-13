@@ -12,6 +12,7 @@ prove anything against a live/production Catalyst Center.
 
 Run:  pytest tests/test_catalyst_center_adapter.py
 """
+
 from __future__ import annotations
 
 import json
@@ -36,6 +37,7 @@ def _load(name: str) -> dict:
 
 
 # --- devices ---------------------------------------------------------------
+
 
 def test_devices_response_maps_every_result_to_valid_entity():
     entities = catalyst_devices_response_to_entities(_load("catalyst_devices.json"))
@@ -82,6 +84,7 @@ def test_single_record_helper_matches_list_helper():
 
 # --- issues (events) -------------------------------------------------------
 
+
 def test_empty_issues_envelope_yields_no_events():
     # the real captured /issues response is {"response": [], "totalCount": "0"}
     events = catalyst_issues_response_to_events(_load("catalyst_issues.json"))
@@ -94,6 +97,7 @@ def test_per_issue_mapping_is_blocked_until_a_real_issue_object_exists():
 
 
 # --- guards ----------------------------------------------------------------
+
 
 def test_response_validation_rejects_a_payload_without_response_list():
     with pytest.raises(ValueError):

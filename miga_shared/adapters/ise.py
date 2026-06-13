@@ -25,6 +25,7 @@ flow fields (protocol/ports/app/dscp/observation_point) have no ISE source.
 (Note: the endpoint object HAS a "protocol" field, but it is an endpoint
 attribute, not a flow protocol, and it is not mapped onto any flow field.)
 """
+
 from __future__ import annotations
 
 from typing import Any
@@ -118,7 +119,8 @@ def ise_endpoints_response_to_entities(
     if not isinstance(payload, list):
         raise ValueError(
             "expected ISE OpenAPI /api/v1/endpoint response to be a JSON array; "
-            "got " + type(payload).__name__
+            "got "
+            + type(payload).__name__
             + " (ERS SearchResult wrapper is not handled -- ERS was disabled)"
         )
     return [ise_endpoint_to_entity(r) for r in payload]
