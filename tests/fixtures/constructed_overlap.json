@@ -1,0 +1,70 @@
+{
+  "_note": "CONSTRUCTED overlap, NOT real sandbox data. Records use the real per-platform response shapes (verified field names from the Phase A captures), but one device's identifiers are deliberately aligned across NetBox/Catalyst Center/ISE to exercise Phase B resolution. The independent free sandboxes share no naturally-overlapping device (the only free real overlap is the Catalyst Center + ISE SDA pairing, not captured). 'edge-sw-01' is the aligned device; 'core-sw-02' and the spare ISE endpoint are distinct and must NOT merge into it.",
+
+  "netbox_devices": {
+    "count": 1,
+    "results": [
+      {
+        "id": 9001,
+        "url": "https://demo.netbox.dev/api/dcim/devices/9001/",
+        "name": "edge-sw-01",
+        "serial": "FCW2245X0YZ",
+        "asset_tag": "EDGE01",
+        "site": {"name": "Lab", "slug": "lab"},
+        "status": {"value": "active", "label": "Active"},
+        "primary_ip4": null
+      }
+    ]
+  },
+
+  "catalyst_devices": {
+    "response": [
+      {
+        "hostname": "edge-sw-01",
+        "serialNumber": "FCW2245X0YZ",
+        "managementIpAddress": "10.99.0.1",
+        "macAddress": "52:54:00:AB:CD:EF",
+        "platformId": "C9KV-UADP-8P",
+        "role": "ACCESS",
+        "softwareVersion": "17.12.1prd9",
+        "reachabilityStatus": "Reachable",
+        "instanceUuid": "11111111-1111-1111-1111-111111111111",
+        "id": "11111111-1111-1111-1111-111111111111"
+      },
+      {
+        "hostname": "core-sw-02",
+        "serialNumber": "FCW9999Z9ZZ",
+        "managementIpAddress": "10.99.0.2",
+        "macAddress": "52:54:00:99:99:99",
+        "platformId": "C9KV-UADP-8P",
+        "role": "DISTRIBUTION",
+        "softwareVersion": "17.12.1prd9",
+        "reachabilityStatus": "Reachable",
+        "instanceUuid": "33333333-3333-3333-3333-333333333333",
+        "id": "33333333-3333-3333-3333-333333333333"
+      }
+    ],
+    "version": "1.0"
+  },
+
+  "ise_endpoints": [
+    {
+      "id": "22222222-2222-2222-2222-222222222222",
+      "name": "52:54:00:ab:cd:ef",
+      "mac": "52:54:00:ab:cd:ef",
+      "groupId": "aa0e8b20-8bff-11e6-996c-525400b48521",
+      "profileId": "",
+      "ipAddress": null,
+      "serialNumber": null
+    },
+    {
+      "id": "44444444-4444-4444-4444-444444444444",
+      "name": "AA:BB:CC:DD:EE:FF",
+      "mac": "AA:BB:CC:DD:EE:FF",
+      "groupId": "aa0e8b20-8bff-11e6-996c-525400b48521",
+      "profileId": "",
+      "ipAddress": null,
+      "serialNumber": null
+    }
+  ]
+}
