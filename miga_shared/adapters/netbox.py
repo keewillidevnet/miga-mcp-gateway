@@ -22,7 +22,7 @@ NetBox source and are never populated here.
 """
 from __future__ import annotations
 
-from typing import Any, Optional
+from typing import Any
 
 from ..canonical import CanonicalEntity, CanonicalEvent, EntityType, NativeIdentifiers
 from ..models import PlatformType
@@ -30,7 +30,7 @@ from ..models import PlatformType
 _P = PlatformType.NETBOX
 
 
-def _clean(s: Optional[str]) -> Optional[str]:
+def _clean(s: str | None) -> str | None:
     """Empty/whitespace string -> None; otherwise the stripped string."""
     if s is None:
         return None
@@ -219,7 +219,7 @@ _OBJECT_KIND_PREFIX = {
 }
 
 
-def _changed_object_native_key(object_type: Optional[str], object_id: Any) -> str:
+def _changed_object_native_key(object_type: str | None, object_id: Any) -> str:
     prefix = _OBJECT_KIND_PREFIX.get(object_type or "", object_type or "object")
     return f"{prefix}:{object_id}"
 

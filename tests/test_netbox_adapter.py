@@ -13,6 +13,7 @@ Run:  pytest tests/test_netbox_adapter.py
 from __future__ import annotations
 
 import json
+from datetime import datetime, timezone
 from pathlib import Path
 
 import pytest
@@ -26,8 +27,6 @@ from miga_shared.adapters.netbox import (
 )
 from miga_shared.canonical import CanonicalEntity, CanonicalEvent, EntityType
 from miga_shared.models import PlatformType, SeverityLevel
-
-from datetime import datetime, timezone
 
 FIX = Path(__file__).parent / "fixtures"
 

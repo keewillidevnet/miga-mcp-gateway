@@ -27,7 +27,7 @@ attribute, not a flow protocol, and it is not mapped onto any flow field.)
 """
 from __future__ import annotations
 
-from typing import Any, Optional
+from typing import Any
 
 from ..canonical import CanonicalEntity, CanonicalEvent, EntityType, NativeIdentifiers
 from ..models import PlatformType
@@ -35,7 +35,7 @@ from ..models import PlatformType
 _P = PlatformType.ISE
 
 
-def _clean(s: Optional[Any]) -> Optional[str]:
+def _clean(s: Any | None) -> str | None:
     """Empty/whitespace string -> None; otherwise the stripped string."""
     if s is None:
         return None

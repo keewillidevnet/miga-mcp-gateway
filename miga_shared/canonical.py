@@ -30,7 +30,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 from enum import Enum
-from typing import Any, Optional
+from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
@@ -74,12 +74,12 @@ class NativeIdentifiers(BaseModel):
     """
     model_config = ConfigDict(str_strip_whitespace=True)
 
-    hostname: Optional[str] = None
-    serial: Optional[str] = None
-    ip: Optional[str] = None
-    mac: Optional[str] = None
-    ci: Optional[str] = None          # configuration-item id (e.g. CMDB sys_id)
-    uuid: Optional[str] = None
+    hostname: str | None = None
+    serial: str | None = None
+    ip: str | None = None
+    mac: str | None = None
+    ci: str | None = None          # configuration-item id (e.g. CMDB sys_id)
+    uuid: str | None = None
     extra: dict[str, str] = Field(default_factory=dict)
 
     def any_set(self) -> bool:
@@ -100,7 +100,7 @@ class CanonicalEntity(BaseModel):
     entity_type: EntityType
     identifiers: NativeIdentifiers = Field(default_factory=NativeIdentifiers)
     source_platform: PlatformType
-    source_record_ref: Optional[str] = None
+    source_record_ref: str | None = None
     attributes: dict[str, Any] = Field(default_factory=dict)
 
     @staticmethod
@@ -125,12 +125,12 @@ class ObservationPoint(BaseModel):
     Declared now for the flow-bearing platforms that come later
     (Meraki / ThousandEyes / SD-WAN).
     """
-    interface: Optional[str] = None
-    direction: Optional[str] = None  # "ingress" | "egress"
+    interface: str | None = None
+    direction: str | None = None  # "ingress" | "egress"
 
     @field_validator("direction")
     @classmethod
-    def _check_direction(cls, v: Optional[str]) -> Optional[str]:
+    def _check_direction(cls, v: str | None) -> str | None:
         if v is not None and v not in ("ingress", "egress"):
             raise ValueError("direction must be 'ingress' or 'egress'")
         return v
@@ -151,19 +151,19 @@ class CanonicalEvent(BaseModel):
     type: str                                # normalized event type
     timestamp: datetime = Field(default_factory=_utcnow)
     source_platform: PlatformType
-    source_record_ref: Optional[str] = None  # pointer back to the source record
+    source_record_ref: str | None = None  # pointer back to the source record
     severity: SeverityLevel = SeverityLevel.INFO
     attributes: dict[str, Any] = Field(default_factory=dict)
     additional_entity_refs: list[str] = Field(default_factory=list)
     tags: list[str] = Field(default_factory=list)
 
     # --- flow / telemetry (populated only where the source provides it) ---
-    protocol: Optional[str] = None
-    src_port: Optional[int] = None
-    dst_port: Optional[int] = None
-    app_classification: Optional[str] = None
-    dscp: Optional[int] = None
-    observation_point: Optional[ObservationPoint] = None
+    protocol: str | None = None
+    src_port: int | None = None
+    dst_port: int | None = None
+    app_classification: str | None = None
+    dscp: int | None = None
+    observation_point: ObservationPoint | None = None
 
     @field_validator("timestamp")
     @classmethod
@@ -175,7 +175,7 @@ class CanonicalEvent(BaseModel):
 
     @field_validator("dscp")
     @classmethod
-    def _dscp_range(cls, v: Optional[int]) -> Optional[int]:
+    def _dscp_range(cls, v: int | None) -> int | None:
         if v is not None and not (0 <= v <= 63):
             raise ValueError("dscp must be a 6-bit codepoint in 0..63")
         return v
