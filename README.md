@@ -25,15 +25,13 @@
   <img src="docs/architecture.png" alt="MIGA architecture: Webex chat into the MIGA MCP Gateway, fanning out to the platform MCP servers, with Redis feeding INFER" width="900">
 </p>
 
-**Verified:** 9/9 OASF records (8 platforms + INFER) published to an AGNTCY Directory and pulled back by CID at schema 1.0.0. MCP client transports over HTTP/SSE and stdio.
-
-The gateway never re-vendors upstream server logic. It opens an MCP client session over each server's native transport (declared in the registry) and forwards `tools/list` / `tools/call`. Connection details are **config-driven**, never hardcoded.
-
 ## Overview
 
 Modern enterprise networks span many platforms: Cisco ThousandEyes, Splunk, Cisco Meraki, Catalyst SD-WAN, Catalyst Center, ISE, ServiceNow, NetBox, and more. Each is its own silo, with its own telemetry, access model, and dialect, and each can only answer about itself. Getting data out of any one of them was never the hard part; seeing across all of them at once is.
 
-That is the gap MIGA (MCP Intelligence Gateway Architecture) fills. It is built on the Model Context Protocol (MCP), an open standard that lets a system expose its data and actions as a set of self-describing tools any client can call the same way, instead of through a bespoke, vendor-specific API; a platform's MCP server is the component that offers those tools. Rather than reimplementing platform integrations, the MIGA gateway connects to each platform's real, published MCP server as an MCP client, which turns every platform into one common contract. A config-driven registry routes each request by role across six domains (observability, security, automation, configuration, compliance, and identity), and every server MIGA fronts is published as an OASF capability record to an AGNTCY Directory, so the set is discoverable by capability. MIGA normalizes the replies into a single schema keyed to resolved entities and adds the cross-platform correlation no single platform can provide, all without storing a second copy of anyone's telemetry.
+That is the gap MIGA (MCP Intelligence Gateway Architecture) fills. It is built on the Model Context Protocol (MCP), an open standard that lets a system expose its data and actions as a set of self-describing tools any client can call the same way, instead of through a bespoke, vendor-specific API; a platform's MCP server is the component that offers those tools. Rather than reimplementing platform integrations, the MIGA gateway connects to each platform's real, published MCP server as an MCP client: it opens a session over that server's native transport, whether HTTP/SSE or stdio, and forwards the server's own tool calls instead of re-vendoring its logic.
+
+A config-driven registry routes each request by role across six domains (observability, security, automation, configuration, compliance, and identity), and every server in the system, the eight platforms plus INFER, is published as an OASF capability record to an AGNTCY Directory, nine in all and each verified retrievable there by content ID at schema 1.0.0, so the set is discoverable by capability. MIGA normalizes the replies into a single schema keyed to resolved entities and adds the cross-platform correlation no single platform can provide, all without storing a second copy of anyone's telemetry.
 
 Users interact conversationally through a Webex bot that embeds an MCP client, converting natural language into structured MCP tool calls and returning the results as formatted, interactive responses in the chat, with grounded conversational replies coming as the LLM layer lands. You ask once, in plain language, instead of opening a separate console for every platform and stitching the answers together by hand.
 
