@@ -19,73 +19,25 @@
 
 ---
 
-## Overview
-
-Modern enterprise networks span many platforms: Cisco ThousandEyes, Splunk, Cisco
-Meraki, Catalyst SD-WAN, Catalyst Center, ISE, ServiceNow, NetBox, and more. Each
-exposes its own MCP server, telemetry, and access model. **MIGA is the aggregation
-and fusion layer over that ecosystem.** Rather than reimplementing platform
-integrations, the MIGA gateway connects to each platform's *real, published MCP
-server* as an MCP **client**, routes by role, and adds cross-platform reasoning that
-no single platform can provide.
-
-Users interact conversationally through a **Webex Bot** that embeds an MCP Client,
-converting natural language into structured MCP tool calls via an NLP pipeline, with
-results rendered as rich Adaptive Cards.
-
-The **INFER** (Infrastructure Network Fusion Engine for Reasoning) service, MIGA's
-one original server, continuously ingests the normalized output of the registered
-servers to perform predictive analysis, root cause analysis, anomaly correlation,
-and risk scoring across platforms.
-
 ## Architecture
 
-```
-┌────────────────────────────────────────────────────────────────────────────┐
-│                             Webex Bot (Python)                             │
-│             NLP Intent -> MCP Client -> Adaptive Cards -> HITL             │
-│                     [AGNTCY Identity Badge — planned]                      │
-└────────────────────────────────────────────────────────────────────────────┘
-                                       │
-                                       │ JSON-RPC 2.0 (MCP)
-                                       ▼
-┌────────────────────────────────────────────────────────────────────────────┐
-│                        Gateway MCP Server (Python)                         │
-│           Registry-driven routing  (config/server-registry.yaml)           │
-│          OASF records · AGNTCY Directory publish: live (verified)          │
-│               6 Roles: Observability | Security | Automation               │
-│                   Configuration | Compliance | Identity                    │
-│        MCP CLIENT transports: HTTP/SSE URLs + stdio (docker run -i)        │
-└────────────────────────────────────────────────────────────────────────────┘
-         │                   │                   │                   │
-         ▼                   ▼                   ▼                   ▼
-┌────────────────┐  ┌────────────────┐  ┌────────────────┐  ┌────────────────┐
-│  ThousandEyes  │  │     Splunk     │  │     Meraki     │  │     SD-WAN     │
-│     Cisco      │  │                │  │     Cisco      │  │     Cisco      │
-│  remote·http   │  │  remote·http   │  │  compose·http  │  │  docker·stdio  │
-└────────────────┘  └────────────────┘  └────────────────┘  └────────────────┘
+<p align="center">
+  <img src="docs/miga_topo.png" alt="MIGA architecture: Webex chat into the MIGA MCP Gateway, fanning out to the platform MCP servers, with Redis feeding INFER" width="900">
+</p>
 
-┌────────────────┐  ┌────────────────┐  ┌────────────────┐  ┌────────────────┐
-│    Catalyst    │  │   ServiceNow   │  │      ISE       │  │     NetBox     │
-│     Center     │  │                │  │     Cisco      │  │   read-only    │
-│  local·stdio   │  │  local·stdio   │  │  compose·http  │  │  compose·http  │
-└────────────────┘  └────────────────┘  └────────────────┘  └────────────────┘
+**Verified:** 9/9 OASF records (8 platforms + INFER) published to an AGNTCY Directory and pulled back by CID at schema 1.0.0. MCP client transports over HTTP/SSE and stdio.
 
-All 8 servers + INFER have authored OASF records (validated against OASF 1.0.0).
-Routing is registry-driven; OASF records are published to a real AGNTCY Directory
-(verified live: 9/9, CIDs, pull-by-CID at schema_version 1.0.0).
-INFER consumes their normalized output:
+The gateway never re-vendors upstream server logic. It opens an MCP client session over each server's native transport (declared in the registry) and forwards `tools/list` / `tools/call`. Connection details are **config-driven**, never hardcoded.
 
-┌────────────────────────────────────────────────────────────────────────────┐
-│                   INFER — Fusion Engine (MIGA-original)                    │
-│         Correlation · Root Cause · Anomaly · Predict · Risk Score          │
-└────────────────────────────────────────────────────────────────────────────┘
-```
+## Overview
 
-The gateway never re-vendors upstream server logic. It opens an MCP client session
-over each server's native transport (declared in the registry) and forwards
-`tools/list` / `tools/call`. Connection details are **config-driven**, never
-hardcoded.
+Modern enterprise networks span many platforms: Cisco ThousandEyes, Splunk, Cisco Meraki, Catalyst SD-WAN, Catalyst Center, ISE, ServiceNow, NetBox, and more. Each is its own silo, with its own telemetry, access model, and dialect, and each can only answer about itself. Getting data out of any one of them was never the hard part; seeing across all of them at once is.
+
+That is the gap MIGA (MCP Intelligence Gateway Architecture) fills. It is built on the Model Context Protocol (MCP), an open standard that lets a system expose its data and actions as a set of self-describing tools any client can call the same way, instead of through a bespoke, vendor-specific API; a platform's MCP server is the component that offers those tools. Rather than reimplementing platform integrations, the MIGA gateway connects to each platform's real, published MCP server as an MCP client, which turns every platform into one common contract. A config-driven registry routes each request by role across six domains (observability, security, automation, configuration, compliance, and identity), and every server MIGA fronts is published as an OASF capability record to an AGNTCY Directory, so the set is discoverable by capability. MIGA normalizes the replies into a single schema keyed to resolved entities and adds the cross-platform correlation no single platform can provide, all without storing a second copy of anyone's telemetry.
+
+Users interact conversationally through a Webex bot that embeds an MCP client, converting natural language into structured MCP tool calls and returning the results as formatted, interactive responses in the chat, with grounded conversational replies coming as the LLM layer lands. You ask once, in plain language, instead of opening a separate console for every platform and stitching the answers together by hand.
+
+At the center is INFER (Infrastructure Network Fusion Engine for Reasoning), MIGA's one original service and the piece that does the cross-platform reasoning: correlation, root-cause analysis, anomaly detection, and risk scoring. Instead of ingesting and holding a continuous firehose, it reasons over the normalized, entity-resolved output of the other servers, working from the distilled signals each platform already surfaces and pulling deeper detail only when a question calls for it. Every conclusion it returns is tied back to the evidence behind it.
 
 ## Quick Start
 
