@@ -317,10 +317,13 @@ miga-mcp-gateway/
 ├── miga_shared/
 │   ├── registry.py                  # Registry loader (parse, validate, resolve ${ENV})
 │   ├── transport.py                 # MCP client transport: HTTP/SSE + stdio (docker run -i)
+│   ├── canonical.py                 # Canonical schema: events, entities, Findings (collate contract)
+│   ├── resolve.py                   # Entity resolution: collapse one device across platforms
+│   ├── adapters/                    # Per-platform normalization: NetBox, Catalyst Center, ISE
 │   └── ...                          # auth, AGNTCY, models, formatters
 ├── packages/
 │   ├── gateway/                     # Gateway MCP Server (registry-driven role routing)
-│   ├── webex_bot/                   # Webex Bot (NLP + MCP Client + Adaptive Cards)
+│   ├── webex_bot/                   # Webex Bot (intent routing + MCP Client + Adaptive Cards)
 │   └── cli/                         # miga-cli tool
 ├── servers/
 │   └── infer_mcp/                   # INFER fusion engine — MIGA's only original server
