@@ -22,7 +22,7 @@
 ## Architecture
 
 <p align="center">
-  <img src="docs/miga_topo.png" alt="MIGA architecture: Webex chat into the MIGA MCP Gateway, fanning out to the platform MCP servers, with Redis feeding INFER" width="900">
+  <img src="docs/architecture.png" alt="MIGA architecture: Webex chat into the MIGA MCP Gateway, fanning out to the platform MCP servers, with Redis feeding INFER" width="900">
 </p>
 
 **Verified:** 9/9 OASF records (8 platforms + INFER) published to an AGNTCY Directory and pulled back by CID at schema 1.0.0. MCP client transports over HTTP/SSE and stdio.
